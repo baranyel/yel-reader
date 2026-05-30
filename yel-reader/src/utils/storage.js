@@ -62,50 +62,47 @@ export function readingTime(words) {
 
 const SEED_TEXTS = [
   {
-    id: 't-ocean',
-    title: 'Notes from the Shore',
-    savedAt: Date.now() - 1000 * 60 * 60 * 26,
+    id: 't-academic',
+    title: 'The Neuroscience of Memory Consolidation',
+    savedAt: Date.now() - 1000 * 60 * 60 * 24,
     body:
-      "The tide came in slowly that evening, a relentless murmur against the rocks. I sat at the threshold of the dunes and let my thoughts drift with it. There is a profound solitude by the sea at dusk, when the light grows luminous and then fades, and the vast horizon turns the color of cooled iron.\n\n" +
-      "I have never quite been able to fathom the ocean. It is indifferent to us, serene one hour and ferocious the next, and yet people return to it for solace. Perhaps we yearn for something larger than our small and fleeting troubles. Perhaps the water simply reminds us to be patient.\n\n" +
-      "A gull lingered on a post nearby, weary from the wind. I watched it gather itself and ascend, a fragile and delicate thing against an immense sky, until it was only a glimpse, and then nothing at all.",
+      "Memory consolidation refers to the process by which newly acquired information is stabilized into long-term storage. This phenomenon, first systematically described in the late nineteenth century following observations of retrograde amnesia in brain-injured patients, has since become one of the most extensively studied topics in cognitive neuroscience.\n\n" +
+      "At the cellular level, consolidation involves a cascade of molecular events initiated by synaptic activity. When neurons fire repeatedly in close temporal proximity, the connections between them are strengthened through a mechanism known as long-term potentiation (LTP). This process depends critically on the activation of NMDA receptors and the subsequent synthesis of new proteins, which structurally reinforce synaptic pathways. Interference with protein synthesis during a narrow post-learning window reliably impairs memory retention, a finding that underscores the biological necessity of this phase.\n\n" +
+      "At the systems level, the hippocampus plays an indispensable role in the initial encoding and early consolidation of declarative memories — that is, memories for facts and events that can be consciously recalled. Evidence from patients with bilateral hippocampal lesions, most notably the extensively documented case of H.M., demonstrates that damage to this structure prevents the formation of new long-term memories while leaving remote memories and procedural skills largely intact. This dissociation has been instrumental in establishing the concept of multiple memory systems operating in parallel.\n\n" +
+      "A particularly compelling theory holds that during slow-wave sleep, hippocampal representations are sequentially reactivated and gradually transferred to the neocortex for permanent storage — a process termed systems consolidation. The neocortex, with its vast associative networks, is better suited to store and integrate information over extended timescales. Empirical support for this model comes from studies demonstrating that targeted disruption of slow oscillations during sleep impairs next-day recall, whereas enhancement of these oscillations produces a corresponding improvement.\n\n" +
+      "More recent conceptualizations have challenged the traditional view of consolidation as a one-time stabilization event. The discovery of reconsolidation — the observation that reactivating a stored memory renders it temporarily labile and susceptible to disruption — suggests that memory is a far more dynamic process than previously assumed. Each act of retrieval appears to initiate a new round of consolidation, potentially allowing memories to be updated, strengthened, or distorted in light of new information.\n\n" +
+      "These findings carry substantial implications for the treatment of maladaptive memories in conditions such as post-traumatic stress disorder, where intrusive recollections resist voluntary suppression. Pharmacological agents administered during the reconsolidation window have shown promise in attenuating the emotional intensity of traumatic memories in both animal models and preliminary human trials, though significant ethical and practical obstacles remain before such interventions can be adopted clinically.",
   },
   {
-    id: 't-stoic',
-    title: 'On a Quiet Mind',
-    savedAt: Date.now() - 1000 * 60 * 60 * 50,
+    id: 't-novel',
+    title: 'The Old Man and the Sea — A Summary',
+    savedAt: Date.now() - 1000 * 60 * 60 * 48,
     body:
-      "It is not events that disturb us, the old teacher said, but our perception of them. An obstacle in the road is only an obstacle until judgment makes it a disaster. With patience and a little discipline, the same stone becomes a step.\n\n" +
-      "Virtue, he believed, is a kind of resolve that we practice rather than possess. We endure what we must, we contemplate what we can change, and we meet fortune — kind or cruel — with the same tranquil face. Courage is not the absence of fear but the resolve to act despite it.\n\n" +
-      "To live well, then, is a humble and inevitable discipline: to want less, to notice more, and to let the indifferent world be exactly what it is.",
+      "Ernest Hemingway's short novel tells the story of Santiago, an old Cuban fisherman who has not caught a fish for eighty-four days. The other fishermen feel sorry for him, and some of them laugh at him quietly. Only a young boy named Manolin still believes in Santiago and helps him every evening.\n\n" +
+      "One morning before dawn, Santiago rows his small boat far out into the Gulf Stream, further than he usually goes. He puts his fishing lines deep into the water and waits. After a long time, something very large pulls on one of his lines. He cannot see what it is, but he knows from the weight that it is a great fish.\n\n" +
+      "The fish begins to pull the boat slowly through the water. Santiago holds the line tightly with his hands, even though it cuts into his skin. He talks to the fish, calling it his brother. He respects the fish deeply, even as he tries to catch it. The struggle continues for two days and two nights. Santiago does not sleep. He eats a little raw fish to keep his strength. His hands hurt badly and his back aches, but he does not give up.\n\n" +
+      "On the third day, the great fish — a marlin — finally comes to the surface. It is enormous, longer than the boat itself. Santiago uses all his remaining strength to pull the marlin close and kill it with his harpoon. He feels both sad and proud. He ties the marlin to the side of the boat and begins the long journey home.\n\n" +
+      "But the blood from the dead marlin attracts sharks. They come one by one and then in groups, eating pieces of the marlin. Santiago fights them with his harpoon, then with a knife tied to an oar, and finally with the oar itself. But there are too many sharks. By the time he reaches the harbour, only the skeleton of the great fish remains.\n\n" +
+      "Santiago drags himself home and falls asleep, exhausted. The next morning, the fishermen measure the skeleton and are amazed by its size. Manolin sits with the old man and promises to fish with him again. The story is about courage, loneliness, and what it means to face defeat without losing your dignity.",
   },
   {
-    id: 't-stars',
-    title: 'A Field Guide to the Night Sky',
-    savedAt: Date.now() - 1000 * 60 * 60 * 73,
+    id: 't-children',
+    title: 'Charlotte\'s Web — A Summary',
+    savedAt: Date.now() - 1000 * 60 * 60 * 72,
     body:
-      "On a clear night far from the city, the cosmos opens overhead in vivid and intricate detail. The first thing to find is a celestial landmark — a bright, radiant star — and let your eyes wander outward from there.\n\n" +
-      "What looks like a smudge of cloud may in fact be a nebula, an immense region of gas and dust where new stars kindle into being. Every point of light you see has traveled an almost unimaginable distance, at tremendous velocity, only to arrive as a faint glimpse at the back of your eye.\n\n" +
-      "Gravity holds it all in its long, patient orbit. To contemplate the night sky is to feel both humble and strangely connected — a curious mind looking up into something vast, ancient, and serene.",
-  },
-  {
-    id: 't-letter',
-    title: 'A Letter to a Younger Friend',
-    savedAt: Date.now() - 1000 * 60 * 60 * 120,
-    body:
-      "I'll be candid with you, since candor is the only gift I have to spare. The years ahead will meander more than you expect. You will yearn for a straight road and be handed a winding one instead, and that is not a failure — it is simply the shape of a life.\n\n" +
-      "Be resilient, but stay tender. Let your work be fervent and your judgments slow. Seek the company of curious people and the quiet of intimate rooms. When you are weary, find solace in small and ordinary things: a warm light, an eloquent sentence, the patience of an old friend who lets you linger.\n\n" +
-      "And when fortune turns, as it surely will, remember that even the most profound changes begin as a single, fragile thought.",
+      "Charlotte's Web is a story about a pig named Wilbur and his best friend, a spider named Charlotte.\n\n" +
+      "Wilbur lives on a farm. A young girl named Fern loves him very much. She feeds him and takes care of him every day. But Wilbur is sad sometimes because he is lonely.\n\n" +
+      "One day, Wilbur hears a voice. The voice belongs to Charlotte. She is a spider. She lives in the corner of the barn. Wilbur and Charlotte become very good friends. They talk every day.\n\n" +
+      "One day, Wilbur learns some bad news. The farmer wants to sell him. Wilbur is very scared. Charlotte tells him not to worry. She has a plan.\n\n" +
+      "Charlotte writes words in her web. The words say things like 'Some Pig' and 'Terrific'. People come from far away to see the special web. They think Wilbur is a very special pig. The farmer is very happy and proud.\n\n" +
+      "Because of Charlotte's words, Wilbur becomes famous. The farmer decides not to sell him. Wilbur is safe!\n\n" +
+      "But Charlotte is very tired. Writing the words was hard work. At the end of the story, Charlotte dies. Wilbur is very sad. He loved Charlotte very much.\n\n" +
+      "Before she dies, Charlotte makes an egg sac. In spring, hundreds of baby spiders are born. Some of them stay on the farm. Wilbur is happy to have new friends.\n\n" +
+      "This story teaches us about friendship and love. A good friend helps you even when it is difficult.",
   },
 ];
 
-const SEED_WORDS = [
-  { word: 'ephemeral', sourceId: 't-ocean', sourceTitle: 'Notes from the Shore', savedAt: Date.now() - 1000 * 60 * 60 * 20 },
-  { word: 'serene', sourceId: 't-stars', sourceTitle: 'A Field Guide to the Night Sky', savedAt: Date.now() - 1000 * 60 * 60 * 44 },
-  { word: 'resolve', sourceId: 't-stoic', sourceTitle: 'On a Quiet Mind', savedAt: Date.now() - 1000 * 60 * 60 * 49 },
-  { word: 'meander', sourceId: 't-letter', sourceTitle: 'A Letter to a Younger Friend', savedAt: Date.now() - 1000 * 60 * 60 * 6 },
-  { word: 'luminous', sourceId: 't-ocean', sourceTitle: 'Notes from the Shore', savedAt: Date.now() - 1000 * 60 * 30 },
-];
+const SEED_WORDS = [];
 
 export function saveProgress(textId, page) {
   const all = load(PROGRESS_KEY, {});
