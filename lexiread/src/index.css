@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #0F766E;
+  --accent-soft: #0f766e1a;
+  --accent-contrast: #ffffff;
+  --reading-font: 'Lora', Georgia, serif;
+  --reading-size: 20px;
+  --radius: 12px;
+  --radius-sm: 9px;
+  --radius-lg: 18px;
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+html[data-theme="light"] {
+  --bg: #FAFAF9;
+  --bg-elev: #ffffff;
+  --bg-sunk: #f4f3f1;
+  --surface-hover: #f1f0ed;
+  --text: #1c1b19;
+  --text-soft: #57544e;
+  --text-faint: #8a867e;
+  --border: #e7e5e1;
+  --border-strong: #d8d5cf;
+  --shadow-sm: 0 1px 2px rgba(28,27,25,.05), 0 1px 1px rgba(28,27,25,.04);
+  --shadow-md: 0 4px 14px rgba(28,27,25,.07), 0 1px 3px rgba(28,27,25,.05);
+  --shadow-lg: 0 18px 50px rgba(28,27,25,.16), 0 6px 16px rgba(28,27,25,.08);
+  --skeleton: linear-gradient(90deg, #eeece8 0%, #f6f5f2 50%, #eeece8 100%);
+}
+
+html[data-theme="dark"] {
+  --bg: #16161a;
+  --bg-elev: #1f1f24;
+  --bg-sunk: #131316;
+  --surface-hover: #2a2a31;
+  --text: #ecebe8;
+  --text-soft: #aba9a3;
+  --text-faint: #76746e;
+  --border: #2c2c33;
+  --border-strong: #3a3a42;
+  --accent-soft: #2dd4bf24;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 6px 18px rgba(0,0,0,.4);
+  --shadow-lg: 0 22px 60px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.4);
+  --skeleton: linear-gradient(90deg, #232329 0%, #2c2c33 50%, #232329 100%);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background .35s ease, color .35s ease;
+}
+#root { height: 100%; }
+button { font-family: inherit; cursor: pointer; }
+::selection { background: var(--accent-soft); }
+
+*::-webkit-scrollbar { width: 11px; height: 11px; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; border: 3px solid var(--bg); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.skel {
+  background: var(--skeleton);
+  background-size: 800px 100%;
+  animation: shimmer 1.3s infinite linear;
+  border-radius: 7px;
+}
+
+.rw {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background .12s ease, box-shadow .12s ease;
+  padding: 0 .5px;
+}
+.rw:hover { background: var(--accent-soft); box-shadow: inset 0 -2px 0 var(--accent); }
+.rw.saved { background: var(--accent-soft); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+.rw.saved:hover { box-shadow: inset 0 -2px 0 var(--accent); }
+.rw.active { background: var(--accent-soft); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* Permanent word highlights */
+.rw.hl-yellow { background: rgba(250, 204, 21, 0.38) !important; }
+.rw.hl-green  { background: rgba(34, 197, 94, 0.32) !important; }
+.rw.hl-blue   { background: rgba(59, 130, 246, 0.32) !important; }
+.rw.hl-pink   { background: rgba(236, 72, 153, 0.32) !important; }
+.rw[class*="hl-"]:hover { box-shadow: inset 0 -2px 0 var(--accent); }
