@@ -110,7 +110,7 @@ async function extractPdf(file) {
 
   const body = paragraphs.join('\n\n');
   const title = pdfTitle || file.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
-  return { title: title.slice(0, 120), body: body.slice(0, 50000) };
+  return { title: title.slice(0, 120), body };
 }
 
 export default function NewText({ onSave, onCancel, t, editingText }) {
