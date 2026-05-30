@@ -3,12 +3,28 @@ import { Button, Icon, IconButton, PageHeader } from '../components/ui.jsx';
 import { wordCount, readingTime } from '../utils/storage.js';
 import { TEXT_LANGUAGES } from '../utils/i18n.js';
 
-// Fetch & parse article text from a URL via CORS proxy
+// CORS proxies tried in order; first success wins.
+// allorigins returns JSON {contents}, others return raw HTML.
+const CORS_PROXIES = [
+  { url: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`, json: false },
+  { url: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, json: true },
+  { url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, json: false },
+];
+
+async function fetchHtml(url) {
+  for (const proxy of CORS_PROXIES) {
+    try {
+      const res = await fetch(proxy.url(url), { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const html = proxy.json ? (await res.json()).contents : await res.text();
+      if (html && html.length > 200) return html;
+    } catch {}
+  }
+  throw new Error('proxy_error');
+}
+
 async function fetchFromUrl(url) {
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error('proxy_error');
-  const { contents } = await res.json();
+  const contents = await fetchHtml(url);
   if (!contents) throw new Error('empty');
 
   const parser = new DOMParser();
