@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button, Icon, IconButton, PageHeader } from '../components/ui.jsx';
 import { wordCount, readingTime } from '../utils/storage.js';
 import { TEXT_LANGUAGES } from '../utils/i18n.js';
@@ -53,15 +53,76 @@ async function fetchFromUrl(url) {
   return { title, body: body.slice(0, 50000) };
 }
 
+// Extract text from a PDF File using pdf.js (CDN worker, no bundler config needed)
+async function extractPdf(file) {
+  const pdfjsLib = await import('pdfjs-dist');
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  // Try to get title from PDF metadata
+  const meta = await pdf.getMetadata().catch(() => null);
+  const pdfTitle = meta?.info?.Title?.trim() || '';
+
+  const paragraphs = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+
+    // Group items into lines by y-position, then lines into paragraphs by gap
+    let lines = [];
+    let currentLine = { y: null, text: '' };
+    for (const item of content.items) {
+      if (!item.str) continue;
+      const y = Math.round(item.transform[5]);
+      if (currentLine.y === null || Math.abs(y - currentLine.y) < 3) {
+        currentLine.y = y;
+        currentLine.text += item.str;
+      } else {
+        if (currentLine.text.trim()) lines.push(currentLine);
+        currentLine = { y, text: item.str };
+      }
+    }
+    if (currentLine.text.trim()) lines.push(currentLine);
+
+    // Merge lines into paragraphs: a gap > 1.5× normal line height = new paragraph
+    if (lines.length === 0) continue;
+    const gaps = lines.slice(1).map((l, i) => Math.abs(lines[i].y - l.y));
+    const medianGap = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)] || 12;
+    const threshold = medianGap * 1.5;
+
+    let para = lines[0].text;
+    for (let j = 1; j < lines.length; j++) {
+      const gap = Math.abs(lines[j - 1].y - lines[j].y);
+      if (gap > threshold) {
+        if (para.trim().length > 20) paragraphs.push(para.trim());
+        para = lines[j].text;
+      } else {
+        para += ' ' + lines[j].text;
+      }
+    }
+    if (para.trim().length > 20) paragraphs.push(para.trim());
+  }
+
+  const body = paragraphs.join('\n\n');
+  const title = pdfTitle || file.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
+  return { title: title.slice(0, 120), body: body.slice(0, 50000) };
+}
+
 export default function NewText({ onSave, onCancel, t, editingText }) {
   const isEditing = !!editingText;
-  const [tab, setTab] = useState('write'); // 'write' | 'url'
+  const [tab, setTab] = useState('write'); // 'write' | 'url' | 'pdf'
   const [title, setTitle] = useState(editingText?.title || '');
   const [body, setBody] = useState(editingText?.body || '');
   const [textLang, setTextLang] = useState(editingText?.language || 'en');
   const [urlInput, setUrlInput] = useState('');
   const [urlState, setUrlState] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
+  const [pdfState, setPdfState] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
+  const [pdfDrag, setPdfDrag] = useState(false);
   const taRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const wc = wordCount(body);
   const chars = body.length;
@@ -80,11 +141,32 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
       setTitle(t2 || title);
       setBody(b2);
       setUrlState('success');
-      setTab('write'); // Switch to write tab to review
+      setTab('write');
     } catch {
       setUrlState('error');
     }
   };
+
+  const handlePdfFile = useCallback(async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) return;
+    setPdfState('loading');
+    try {
+      const { title: t2, body: b2 } = await extractPdf(file);
+      setTitle(t2 || title);
+      setBody(b2);
+      setPdfState('success');
+      setTab('write');
+    } catch {
+      setPdfState('error');
+    }
+  }, [title]);
+
+  const handlePdfDrop = useCallback((e) => {
+    e.preventDefault();
+    setPdfDrag(false);
+    const file = e.dataTransfer.files[0];
+    handlePdfFile(file);
+  }, [handlePdfFile]);
 
   const pageTitle = isEditing ? t('newText.edit_title') : t('newText.title');
   const pageSubtitle = isEditing ? t('newText.edit_subtitle') : t('newText.subtitle');
@@ -101,7 +183,7 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
       {/* Tab bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', background: 'var(--bg-sunk)', borderRadius: 'var(--radius-sm)', padding: 3, gap: 2, border: '1px solid var(--border)' }}>
-          {[{ id: 'write', icon: 'doc', label: t('newText.tab_write') }, { id: 'url', icon: 'link', label: t('newText.tab_url') }].map((tb) => {
+          {[{ id: 'write', icon: 'doc', label: t('newText.tab_write') }, { id: 'url', icon: 'link', label: t('newText.tab_url') }, { id: 'pdf', icon: 'download', label: t('newText.tab_pdf') }].map((tb) => {
             const active = tab === tb.id;
             return (
               <button key={tb.id} onClick={() => setTab(tb.id)} style={{
@@ -175,6 +257,49 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
           {urlState === 'error' && (
             <div style={{ marginTop: 12, fontSize: 13.5, color: '#c0392b', background: 'color-mix(in srgb,#c0392b 10%,transparent)', padding: '9px 14px', borderRadius: 'var(--radius-sm)' }}>
               {t('newText.url_error')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PDF import tab */}
+      {tab === 'pdf' && (
+        <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 22, boxShadow: 'var(--shadow-sm)', marginBottom: 18 }}>
+          <input ref={fileInputRef} type="file" accept=".pdf" style={{ display: 'none' }}
+            onChange={(e) => handlePdfFile(e.target.files[0])} />
+
+          <div
+            onClick={() => pdfState !== 'loading' && fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setPdfDrag(true); }}
+            onDragLeave={() => setPdfDrag(false)}
+            onDrop={handlePdfDrop}
+            style={{
+              border: `2px dashed ${pdfDrag ? 'var(--accent)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-sm)',
+              background: pdfDrag ? 'var(--accent-soft)' : 'var(--bg-sunk)',
+              padding: '40px 24px',
+              textAlign: 'center',
+              cursor: pdfState === 'loading' ? 'wait' : 'pointer',
+              transition: 'all .16s',
+            }}>
+            {pdfState === 'loading' ? (
+              <>
+                <Icon name="loader" size={32} style={{ color: 'var(--accent)', marginBottom: 12 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{t('newText.pdf_extracting')}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 4 }}>{t('newText.pdf_extracting_hint')}</div>
+              </>
+            ) : (
+              <>
+                <Icon name="download" size={32} style={{ color: 'var(--accent)', marginBottom: 12 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{t('newText.pdf_drop')}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 4 }}>{t('newText.pdf_drop_hint')}</div>
+              </>
+            )}
+          </div>
+
+          {pdfState === 'error' && (
+            <div style={{ marginTop: 12, fontSize: 13.5, color: '#c0392b', background: 'color-mix(in srgb,#c0392b 10%,transparent)', padding: '9px 14px', borderRadius: 'var(--radius-sm)' }}>
+              {t('newText.pdf_error')}
             </div>
           )}
         </div>
