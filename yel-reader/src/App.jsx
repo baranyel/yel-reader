@@ -374,6 +374,10 @@ export default function App() {
       onDeleteNote={(id) => {
         setNotes((prev) => { const next = { ...prev }; delete next[id]; save(NOTES_KEY, next); return next; });
         toast({ message: t('toast.note_deleted'), icon: 'trash', tone: 'danger' });
+      }}
+      onNoteSaved={(note) => {
+        setNotes((prev) => { const next = { ...prev, [note.id]: note }; save(NOTES_KEY, next); return next; });
+        toast({ message: t('toast.note_saved'), icon: 'bookmark' });
       }} />;
   } else if (view === 'read') {
     page = current
