@@ -5,7 +5,25 @@ export const SETTINGS_KEY = 'yelreader.settings.v1';
 export const READS_KEY = 'yelreader.reads.v1';
 export const HIGHLIGHTS_KEY = 'yelreader.highlights.v1';
 export const PROGRESS_KEY = 'yelreader.progress.v1';
+export const NOTES_KEY = 'yelreader.notes.v1';
 const SEEDED_KEY = 'yelreader.seeded.v1';
+
+export const ALL_STORAGE_KEYS = [
+  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY,
+  READS_KEY, HIGHLIGHTS_KEY, PROGRESS_KEY, NOTES_KEY,
+];
+
+export function saveNote(note) {
+  const all = load(NOTES_KEY, {});
+  all[note.id] = note;
+  save(NOTES_KEY, all);
+}
+
+export function deleteNote(noteId) {
+  const all = load(NOTES_KEY, {});
+  delete all[noteId];
+  save(NOTES_KEY, all);
+}
 
 export const SETTINGS_DEFAULTS = {
   uiLanguage: 'tr',

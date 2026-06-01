@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Icon, PageHeader } from '../components/ui.jsx';
 import { UI_LANGUAGES, NATIVE_LANGUAGES, TEXT_LANGUAGES } from '../utils/i18n.js';
-import { calcStats } from '../utils/storage.js';
+import { calcStats, ALL_STORAGE_KEYS, load, save } from '../utils/storage.js';
+import { getAllImages, restoreImages } from '../utils/imageStore.js';
 
 // ---- Shared primitives ------------------------------------------------------
 function Section({ label }) {
@@ -83,6 +84,45 @@ function ColorSwatch({ color, active, onClick }) {
 // ---- Settings page ----------------------------------------------------------
 export default function Settings({ tweaks, setTweak, settings, setSetting, t, texts, words, reads }) {
   const stats = calcStats(texts || [], words || [], reads || {});
+  const importRef = useRef(null);
+  const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | null
+
+  const handleExport = async () => {
+    const storage = {};
+    for (const key of ALL_STORAGE_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) storage[key] = JSON.parse(raw);
+    }
+    const images = await getAllImages();
+    const blob = new Blob([JSON.stringify({ version: 1, exportedAt: Date.now(), storage, images }, null, 0)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `yelreader-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!window.confirm(t('settings.import_confirm'))) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.version || !data.storage) throw new Error('invalid');
+      for (const [key, value] of Object.entries(data.storage)) {
+        save(key, value);
+      }
+      if (data.images) await restoreImages(data.images);
+      setImportStatus('ok');
+      setTimeout(() => window.location.reload(), 1200);
+    } catch {
+      setImportStatus('err');
+      setTimeout(() => setImportStatus(null), 4000);
+    }
+  };
   const ACCENTS = ['#0F766E', '#4F46E5', '#15803D', '#BE123C', '#B45309', '#0369A1'];
   const FONTS = ['Lora', 'Newsreader', 'Playfair'];
   const fontLabels = { Lora: 'Lora', Newsreader: 'Newsreader', Playfair: 'Playfair' };
@@ -196,6 +236,35 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t, te
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb,var(--accent) 30%,transparent)', borderRadius: 'var(--radius)', fontSize: 14.5, fontWeight: 600, color: 'var(--accent)' }}>
           <Icon name="zap" size={20} />
           {stats.streak} {t('settings.stat_streak')}
+        </div>
+      )}
+
+      {/* Data section */}
+      <Section label={t('settings.s_data')} />
+      <SettingCard>
+        <SettingRow label={t('settings.export')} hint={t('settings.export_hint')}>
+          <button onClick={handleExport} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', fontSize: 13.5, fontWeight: 600, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-sunk)', color: 'var(--text)', cursor: 'pointer', transition: 'all .14s' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)'; }}>
+            <Icon name="download" size={15} /> {t('settings.export_btn')}
+          </button>
+        </SettingRow>
+        <SettingRow label={t('settings.import')} hint={t('settings.import_hint')} last>
+          <div>
+            <input ref={importRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+            <button onClick={() => importRef.current?.click()} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', fontSize: 13.5, fontWeight: 600, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-sunk)', color: 'var(--text)', cursor: 'pointer', transition: 'all .14s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)'; }}>
+              <Icon name="upload" size={15} /> {t('settings.import_btn')}
+            </button>
+          </div>
+        </SettingRow>
+      </SettingCard>
+
+      {/* Import status */}
+      {importStatus && (
+        <div style={{ padding: '11px 16px', borderRadius: 'var(--radius-sm)', fontSize: 13.5, fontWeight: 500, marginBottom: 16, animation: 'fadeUp .25s ease', background: importStatus === 'ok' ? 'var(--accent-soft)' : 'color-mix(in srgb,#c0392b 10%,transparent)', color: importStatus === 'ok' ? 'var(--accent)' : '#c0392b', border: `1px solid ${importStatus === 'ok' ? 'color-mix(in srgb,var(--accent) 30%,transparent)' : 'color-mix(in srgb,#c0392b 30%,transparent)'}` }}>
+          {importStatus === 'ok' ? t('settings.import_ok') : t('settings.import_err')}
         </div>
       )}
     </div>
