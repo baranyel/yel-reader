@@ -141,7 +141,7 @@ export default function WordPopup({
               </button>
             )}
           </div>
-          {data?.phonetic && (
+          {definitionOptions?.showPhonetic !== false && data?.phonetic && (
             <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 3, fontFamily: "'Courier New', monospace" }}>
               {data.phonetic}
             </div>
@@ -153,12 +153,12 @@ export default function WordPopup({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, paddingTop: 2 }}>
-          {cefrLevel && (
+          {definitionOptions?.showCefr !== false && cefrLevel && (
             <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, color: CEFR_COLORS[cefrLevel], background: `color-mix(in srgb, ${CEFR_COLORS[cefrLevel]} 14%, var(--bg-elev))`, border: `1px solid color-mix(in srgb, ${CEFR_COLORS[cefrLevel]} 35%, transparent)`, letterSpacing: '.03em' }}>
               {cefrLevel}
             </span>
           )}
-          {data && data.pos !== '—' && (
+          {definitionOptions?.showPos !== false && data && data.pos !== '—' && (
             <span style={{ fontSize: 11.5, fontWeight: 600, fontStyle: 'italic', color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '2px 9px', borderRadius: 99 }}>
               {data.pos}
             </span>
@@ -184,7 +184,7 @@ export default function WordPopup({
             {data.definition}
           </p>
 
-          {data.found && data.example && (
+          {definitionOptions?.showExample !== false && data.found && data.example && (
             <div style={{ marginTop: 13, paddingTop: 13, borderTop: '1px solid var(--border)' }}>
               <p style={{ margin: 0, fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 14.5, lineHeight: 1.6, color: 'var(--text-soft)' }}>
                 "{data.example}"
@@ -192,34 +192,21 @@ export default function WordPopup({
             </div>
           )}
 
-          {data.synonyms?.length > 0 && (
+          {definitionOptions?.showSynonyms !== false && data.synonyms?.length > 0 && (
             <ChipRow label={t ? t('popup.synonyms') : 'Synonyms'} chips={data.synonyms} onChip={setChainWord} accent />
           )}
-          {data.antonyms?.length > 0 && (
+          {definitionOptions?.showAntonyms !== false && data.antonyms?.length > 0 && (
             <ChipRow label={t ? t('popup.antonyms') : 'Antonyms'} chips={data.antonyms} onChip={setChainWord} danger />
           )}
 
-          {/* Source badge */}
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {data.translatedWith === 'translated' && (
-              <span style={{ fontSize: 12, color: 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon name="globe" size={12} style={{ color: 'var(--accent)' }} />
-                {t ? t('popup.via_lingva') : 'via Translate'}
-                <span style={{ background: 'var(--accent-soft)', color: 'var(--accent)', padding: '1px 6px', borderRadius: 99, fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>{data.lang}</span>
-              </span>
-            )}
-            {data.source === 'anthropic' && !data.translatedWith && (
+          {data.source === 'anthropic' && !data.translatedWith && (
+            <div style={{ marginTop: 10 }}>
               <span style={{ fontSize: 12, color: 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="sparkle" size={12} style={{ color: 'var(--accent)' }} />
                 {t ? t('popup.via_ai') : 'via AI'}
               </span>
-            )}
-            {data.fallback && (
-              <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>
-                {t ? t('popup.fallback_note') : '(English — translate unavailable)'}
-              </span>
-            )}
-          </div>
+            </div>
+          )}
         </>
       ) : null}
 

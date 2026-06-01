@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { startEyeFavicon, stopEyeFavicon } from './utils/faviconEye.js';
 import { Icon, Logo, Button, IconButton, EmptyState, useToast } from './components/ui.jsx';
 import Home from './pages/Home.jsx';
 import NewText from './pages/NewText.jsx';
@@ -244,6 +245,29 @@ export default function App() {
     return () => el.removeEventListener('scroll', onScroll);
   }, [view, currentId, readLoading]);
 
+  useEffect(() => {
+    const baseTitle = view === 'read'
+      ? (texts.find((tx) => tx.id === currentId)?.title || 'Yel Reader')
+      : 'Yel Reader';
+    document.title = baseTitle;
+    if (view !== 'read') return;
+    const onVisibility = () => {
+      if (document.hidden) {
+        document.title = t('readText.tab_away');
+        startEyeFavicon();
+      } else {
+        document.title = baseTitle;
+        stopEyeFavicon();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      document.title = 'Yel Reader';
+      stopEyeFavicon();
+    };
+  }, [view, currentId, texts, t]);
+
   const persistTexts = (next) => { setTexts(next); save(TEXTS_KEY, next); };
   const persistWords = (next) => { setWords(next); save(WORDS_KEY, next); };
 
@@ -365,7 +389,16 @@ export default function App() {
   const current = texts.find((x) => x.id === currentId);
   const editingText = editingId ? texts.find((x) => x.id === editingId) : null;
   const contentPad = isMobile ? '20px 16px 96px' : '32px 40px 40px';
-  const definitionOptions = { definitionIn: settings.definitionIn, nativeLanguage: settings.nativeLanguage };
+  const definitionOptions = {
+    definitionIn: settings.definitionIn,
+    nativeLanguage: settings.nativeLanguage,
+    showCefr: settings.popupShowCefr !== false,
+    showPos: settings.popupShowPos !== false,
+    showPhonetic: settings.popupShowPhonetic !== false,
+    showExample: settings.popupShowExample !== false,
+    showSynonyms: settings.popupShowSynonyms !== false,
+    showAntonyms: settings.popupShowAntonyms !== false,
+  };
   const currentHighlights = currentId ? (highlights[currentId] || {}) : {};
 
   let page;

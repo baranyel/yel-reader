@@ -117,6 +117,7 @@ export default function ReadText({
   const [active, setActive] = useState(null);
   const [ctxMenu, setCtxMenu] = useState(null);
   const [noteEditor, setNoteEditor] = useState(null);
+  const [showTapHint, setShowTapHint] = useState(() => !localStorage.getItem('tapHintSeen'));
 
   const allParagraphs = useMemo(
     () => text.body.split(/\n+/).filter((p) => p.trim().length > 0),
@@ -168,7 +169,11 @@ export default function ReadText({
   const handleWord = useCallback((el, tok, key, paragraphText) => {
     const context = extractSentence(paragraphText, tok);
     setActive((cur) => (cur && cur.key === key ? null : { el, word: tok, key, context }));
-  }, []);
+    if (showTapHint) {
+      setShowTapHint(false);
+      localStorage.setItem('tapHintSeen', '1');
+    }
+  }, [showTapHint]);
 
   const goToPage = useCallback((idx) => {
     setCurrentPage(idx);
@@ -268,10 +273,12 @@ export default function ReadText({
             <span>Saved {relativeTime(text.savedAt)}</span>
             {isPaginated && (<><span style={{ width: 3, height: 3, borderRadius: 99, background: 'var(--text-faint)' }} /><span>{totalPages} pages</span></>)}
           </div>
-          <div style={{ marginTop: 18, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 99 }}>
-            <Icon name="sparkle" size={14} style={{ color: 'var(--accent)' }} />
-            {t('readText.tap_hint')}
-          </div>
+          {showTapHint && (
+            <div style={{ marginTop: 18, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 99 }}>
+              <Icon name="sparkle" size={14} style={{ color: 'var(--accent)' }} />
+              {t('readText.tap_hint')}
+            </div>
+          )}
         </header>
 
         {/* Reading body — left-padded for note indicators */}

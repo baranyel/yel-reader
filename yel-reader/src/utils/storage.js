@@ -29,6 +29,12 @@ export const SETTINGS_DEFAULTS = {
   uiLanguage: 'tr',
   nativeLanguage: 'tr',
   definitionIn: 'native', // 'source' | 'native'
+  popupShowCefr: true,
+  popupShowPos: true,
+  popupShowPhonetic: true,
+  popupShowExample: true,
+  popupShowSynonyms: true,
+  popupShowAntonyms: true,
 };
 
 export function load(key, fallback) {

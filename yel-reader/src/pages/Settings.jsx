@@ -3,6 +3,7 @@ import { Icon, PageHeader } from '../components/ui.jsx';
 import { UI_LANGUAGES, NATIVE_LANGUAGES, TEXT_LANGUAGES } from '../utils/i18n.js';
 import { calcStats, ALL_STORAGE_KEYS, load, save } from '../utils/storage.js';
 import { getAllImages, restoreImages } from '../utils/imageStore.js';
+import { CEFR_COLORS } from '../utils/cefrWords.js';
 
 // ---- Shared primitives ------------------------------------------------------
 function Section({ label }) {
@@ -81,6 +82,164 @@ function ColorSwatch({ color, active, onClick }) {
   );
 }
 
+// ---- Word card settings + live preview --------------------------------------
+const POPUP_TOGGLES = (t) => [
+  { key: 'popupShowCefr',     label: t('settings.popup_cefr') },
+  { key: 'popupShowPos',      label: t('settings.popup_pos') },
+  { key: 'popupShowPhonetic', label: t('settings.popup_phonetic') },
+  { key: 'popupShowExample',  label: t('settings.popup_example') },
+  { key: 'popupShowSynonyms', label: t('settings.popup_synonyms') },
+  { key: 'popupShowAntonyms', label: t('settings.popup_antonyms') },
+];
+
+function ToggleChip({ label, active, onChange }) {
+  return (
+    <button onClick={() => onChange(!active)} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 7,
+      padding: '8px 14px', borderRadius: 99, border: 'none', cursor: 'pointer',
+      fontSize: 13, fontWeight: 600, transition: 'all .16s',
+      background: active ? 'var(--accent-soft)' : 'var(--bg-sunk)',
+      color: active ? 'var(--accent)' : 'var(--text-faint)',
+      boxShadow: active ? `inset 0 0 0 1.5px var(--accent)` : 'inset 0 0 0 1px var(--border)',
+    }}>
+      <Icon name={active ? 'check' : 'x'} size={13} stroke={2.2} />
+      {label}
+    </button>
+  );
+}
+
+function WordCardPreview({ settings, t }) {
+  const show = (key) => settings[key] !== false;
+  const cefrColor = CEFR_COLORS['A2'];
+  const synonyms = ['recall', 'recollection'];
+  const antonyms = ['forgetfulness'];
+
+  return (
+    <div style={{
+      background: 'var(--bg-elev)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius)', padding: '18px 20px',
+      boxShadow: 'var(--shadow-sm)', position: 'relative',
+    }}>
+      {/* Label */}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.07em', color: 'var(--text-faint)', marginBottom: 14, textTransform: 'uppercase' }}>
+        {t('settings.popup_preview')}
+      </div>
+
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--reading-font)', fontSize: 22, fontWeight: 600, color: 'var(--text)', letterSpacing: '-.01em' }}>
+              memory
+            </span>
+            <div style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+              <Icon name="volume" size={14} stroke={2} />
+            </div>
+          </div>
+          {show('popupShowPhonetic') && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 3, fontFamily: "'Courier New', monospace" }}>
+              /ˈmem.ər.i/
+            </div>
+          )}
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)', marginTop: 5, fontFamily: 'var(--reading-font)', letterSpacing: '-.01em' }}>
+            {t('settings.popup_preview_translation')}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, paddingTop: 2 }}>
+          {show('popupShowCefr') && (
+            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 99, color: cefrColor, background: `color-mix(in srgb, ${cefrColor} 14%, var(--bg-elev))`, border: `1px solid color-mix(in srgb, ${cefrColor} 35%, transparent)`, letterSpacing: '.03em' }}>
+              A2
+            </span>
+          )}
+          {show('popupShowPos') && (
+            <span style={{ fontSize: 11, fontWeight: 600, fontStyle: 'italic', color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '2px 9px', borderRadius: 99 }}>
+              {t('settings.popup_preview_pos')}
+            </span>
+          )}
+          <div style={{ width: 24, height: 24, borderRadius: 7, background: 'transparent', color: 'var(--text-faint)', display: 'grid', placeItems: 'center' }}>
+            <Icon name="x" size={14} />
+          </div>
+        </div>
+      </div>
+
+      {/* Definition */}
+      <p style={{ margin: '10px 0 0', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text)' }}>
+        {t('settings.popup_preview_def')}
+      </p>
+
+      {/* Example */}
+      {show('popupShowExample') && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+          <p style={{ margin: 0, fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 13.5, lineHeight: 1.6, color: 'var(--text-soft)' }}>
+            "{t('settings.popup_preview_example')}"
+          </p>
+        </div>
+      )}
+
+      {/* Synonyms */}
+      {show('popupShowSynonyms') && (
+        <div style={{ marginTop: 10 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {t('popup.synonyms')}
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
+            {synonyms.map((w) => (
+              <span key={w} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 99, border: '1px solid var(--border)', color: 'var(--text-soft)' }}>{w}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Antonyms */}
+      {show('popupShowAntonyms') && (
+        <div style={{ marginTop: 10 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {t('popup.antonyms')}
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
+            {antonyms.map((w) => (
+              <span key={w} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 99, border: '1px solid var(--border)', color: 'var(--text-soft)' }}>{w}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Save button */}
+      <div style={{ marginTop: 14, padding: '9px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+        <Icon name="bookmark" size={15} />
+        {t('popup.save')}
+      </div>
+    </div>
+  );
+}
+
+function WordCardSettings({ settings, setSetting, t }) {
+  const toggles = POPUP_TOGGLES(t);
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {/* Toggle chips */}
+      <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '18px 20px', boxShadow: 'var(--shadow-sm)', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 14 }}>
+          {t('settings.popup_hint')}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {toggles.map(({ key, label }) => (
+            <ToggleChip
+              key={key}
+              label={label}
+              active={settings[key] !== false}
+              onChange={(v) => setSetting(key, v)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Live preview */}
+      <WordCardPreview settings={settings} t={t} />
+    </div>
+  );
+}
+
 // ---- Settings page ----------------------------------------------------------
 export default function Settings({ tweaks, setTweak, settings, setSetting, t, texts, words, reads }) {
   const stats = calcStats(texts || [], words || [], reads || {});
@@ -154,10 +313,7 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t, te
             options={NATIVE_LANGUAGES.map((l) => ({ value: l.code, label: t(`nativeLangs.${l.code}`) }))}
           />
         </SettingRow>
-        <SettingRow label={t('settings.def_in')} last
-          hint={settings.definitionIn === 'native'
-            ? (settings.uiLanguage === 'tr' ? 'Free Dictionary + Lingva çevirisi — ücretsiz, sınırsız' : 'Free Dictionary + Lingva translation — free, unlimited')
-            : (settings.uiLanguage === 'tr' ? 'Doğrudan Free Dictionary API' : 'Directly from Free Dictionary API')}>
+        <SettingRow label={t('settings.def_in')} last>
           <SegControl
             value={settings.definitionIn}
             onChange={(v) => setSetting('definitionIn', v)}
@@ -213,6 +369,10 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t, te
           The tide came in slowly that evening, a relentless murmur against the rocks.
         </p>
       </div>
+
+      {/* Word card section */}
+      <Section label={t('settings.s_popup')} />
+      <WordCardSettings settings={settings} setSetting={setSetting} t={t} />
 
       {/* Statistics section */}
       <Section label={t('settings.s_stats')} />
