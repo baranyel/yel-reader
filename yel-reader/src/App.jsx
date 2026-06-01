@@ -159,6 +159,7 @@ export default function App() {
   const [tweaks, setTweaksState] = useState(() => ({ ...TWEAK_DEFAULTS, ...load(TWEAKS_KEY, {}) }));
   const [settings, setSettingsState] = useState(() => ({ ...SETTINGS_DEFAULTS, ...load(SETTINGS_KEY, {}) }));
   const [view, setView] = useState('library');
+  const [wordsCefrFilter, setWordsCefrFilter] = useState(null);
   const [currentId, setCurrentId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [texts, setTexts] = useState([]);
@@ -373,10 +374,11 @@ export default function App() {
   } else if (view === 'new' || view === 'edit') {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
-    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
+    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} initialCefrFilter={wordsCefrFilter} onCefrFilterClear={() => setWordsCefrFilter(null)} t={t} />;
   } else if (view === 'progress') {
     page = <Progress words={words} t={t}
-      onWordsUpdated={(updated) => persistWords(updated)} />;
+      onWordsUpdated={(updated) => persistWords(updated)}
+      onNavigateToWords={(level) => { setWordsCefrFilter(level); goTo('words'); }} />;
   } else if (view === 'quiz') {
     page = <Quiz words={words} onBack={() => goTo('words')} t={t} />;
   } else if (view === 'review') {

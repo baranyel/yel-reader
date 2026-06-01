@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { Icon, Button } from './ui.jsx';
 import { lookupWord, cleanWord } from '../utils/dictionary.js';
+import { getCefrLevel, CEFR_COLORS } from '../utils/cefrWords.js';
 
 const HIGHLIGHT_COLORS = [
   { id: 'yellow', bg: 'rgba(250,204,21,0.7)', label: '●' },
@@ -17,6 +18,7 @@ export default function WordPopup({
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [cefrLevel, setCefrLevel] = useState(null);
   const [chainWord, setChainWord] = useState(null);
   const [noteText, setNoteText] = useState(wordNote || '');
   const ref = useRef(null);
@@ -33,11 +35,13 @@ export default function WordPopup({
     if (!activeWord) return;
     setLoading(true);
     setData(null);
+    setCefrLevel(null);
     const ctx = chainWord ? '' : context;
     lookupWord(activeWord, ctx, definitionOptions || {}).then((result) => {
       setData(result);
       setLoading(false);
     });
+    getCefrLevel(clean).then(setCefrLevel).catch(() => {});
   }, [activeWord, definitionOptions?.definitionIn, definitionOptions?.nativeLanguage]);
 
   const reposition = useCallback(() => {
@@ -149,6 +153,11 @@ export default function WordPopup({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, paddingTop: 2 }}>
+          {cefrLevel && (
+            <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, color: CEFR_COLORS[cefrLevel], background: `color-mix(in srgb, ${CEFR_COLORS[cefrLevel]} 14%, var(--bg-elev))`, border: `1px solid color-mix(in srgb, ${CEFR_COLORS[cefrLevel]} 35%, transparent)`, letterSpacing: '.03em' }}>
+              {cefrLevel}
+            </span>
+          )}
           {data && data.pos !== '—' && (
             <span style={{ fontSize: 11.5, fontWeight: 600, fontStyle: 'italic', color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '2px 9px', borderRadius: 99 }}>
               {data.pos}

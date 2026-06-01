@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Icon, Button, IconButton, DeleteButton, PageHeader, EmptyState } from '../components/ui.jsx';
 import { relativeTime } from '../utils/storage.js';
+import { CEFR_LEVELS, CEFR_COLORS, getCefrLevelSync } from '../utils/cefrWords.js';
 
 function downloadFile(content, filename, type) {
   const blob = new Blob([content], { type });
@@ -119,10 +120,19 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote }) {
   );
 }
 
-export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, t }) {
+export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, initialCefrFilter, onCefrFilterClear, t }) {
   const [query, setQuery] = useState('');
   const [focus, setFocus] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [cefrFilter, setCefrFilter] = useState(initialCefrFilter || null);
+
+  const enriched = useMemo(() => words.map((w) => ({ ...w, cefr: w.cefr || getCefrLevelSync(w.word) })), [words]);
+
+  const cefrCounts = useMemo(() => {
+    const c = Object.fromEntries(CEFR_LEVELS.map((l) => [l, 0]));
+    for (const w of enriched) { if (w.cefr && c[w.cefr] !== undefined) c[w.cefr]++; }
+    return c;
+  }, [enriched]);
 
   const wordsWithDefs = words.filter((w) => w.definition);
   const quizReady = wordsWithDefs.length >= 4;
@@ -130,14 +140,16 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return words;
-    return words.filter((w) =>
+    let result = enriched;
+    if (cefrFilter) result = result.filter((w) => w.cefr === cefrFilter);
+    if (!q) return result;
+    return result.filter((w) =>
       w.word.toLowerCase().includes(q) ||
       w.sourceTitle.toLowerCase().includes(q) ||
       (w.definition || '').toLowerCase().includes(q) ||
       (w.note || '').toLowerCase().includes(q)
     );
-  }, [words, query]);
+  }, [enriched, query, cefrFilter]);
 
   return (
     <div style={{ maxWidth: 920, margin: '0 auto' }}>
@@ -187,13 +199,36 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
       )}
 
       {words.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 46, background: 'var(--bg-elev)', border: '1px solid', borderColor: focus ? 'var(--accent)' : 'var(--border)', borderRadius: 'var(--radius)', boxShadow: focus ? '0 0 0 3px var(--accent-soft)' : 'var(--shadow-sm)', marginBottom: 18, transition: 'border-color .16s, box-shadow .16s' }}>
-          <Icon name="search" size={18} style={{ color: 'var(--text-faint)' }} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-            placeholder={t('myWords.search_ph')}
-            style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14.5, color: 'var(--text)', fontFamily: 'var(--font-ui)' }} />
-          {query && <IconButton name="x" size={15} onClick={() => setQuery('')} />}
-        </div>
+        <>
+          {/* CEFR filter pills */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {CEFR_LEVELS.filter((l) => cefrCounts[l] > 0).map((level) => {
+              const active = cefrFilter === level;
+              return (
+                <button key={level} onClick={() => { setCefrFilter(active ? null : level); if (active) onCefrFilterClear?.(); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700, padding: '4px 11px', borderRadius: 99, border: `1.5px solid ${active ? CEFR_COLORS[level] : `${CEFR_COLORS[level]}44`}`, background: active ? `color-mix(in srgb, ${CEFR_COLORS[level]} 14%, var(--bg-elev))` : 'transparent', color: active ? CEFR_COLORS[level] : 'var(--text-faint)', cursor: 'pointer', transition: 'all .14s' }}>
+                  {level}
+                  <span style={{ fontSize: 11, fontWeight: 600, opacity: .75 }}>{cefrCounts[level]}</span>
+                </button>
+              );
+            })}
+            {cefrFilter && (
+              <button onClick={() => { setCefrFilter(null); onCefrFilterClear?.(); }}
+                style={{ fontSize: 12, color: 'var(--text-faint)', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 99, padding: '4px 10px', cursor: 'pointer' }}>
+                <Icon name="x" size={11} /> Temizle
+              </button>
+            )}
+          </div>
+
+          {/* Search bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 46, background: 'var(--bg-elev)', border: '1px solid', borderColor: focus ? 'var(--accent)' : 'var(--border)', borderRadius: 'var(--radius)', boxShadow: focus ? '0 0 0 3px var(--accent-soft)' : 'var(--shadow-sm)', marginBottom: 18, transition: 'border-color .16s, box-shadow .16s' }}>
+            <Icon name="search" size={18} style={{ color: 'var(--text-faint)' }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+              placeholder={t('myWords.search_ph')}
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14.5, color: 'var(--text)', fontFamily: 'var(--font-ui)' }} />
+            {query && <IconButton name="x" size={15} onClick={() => setQuery('')} />}
+          </div>
+        </>
       )}
 
       {words.length === 0 ? (

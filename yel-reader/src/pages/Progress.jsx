@@ -102,7 +102,7 @@ function ReclassifyButton({ words, onDone, t }) {
 }
 
 // ---- Main page --------------------------------------------------------------
-export default function Progress({ words: initialWords, t, onWordsUpdated }) {
+export default function Progress({ words: initialWords, t, onWordsUpdated, onNavigateToWords }) {
   const [words, setWords] = useState(initialWords);
 
   // Sync-classify words not yet classified using bundled data only (instant)
@@ -181,11 +181,14 @@ export default function Progress({ words: initialWords, t, onWordsUpdated }) {
       {/* Level cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 10, marginBottom: 20 }}>
         {CEFR_LEVELS.filter((l) => counts[l] > 0).map((level) => (
-          <div key={level} style={{ background: 'var(--bg-elev)', border: `2px solid ${CEFR_COLORS[level]}33`, borderRadius: 'var(--radius)', padding: '14px 12px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+          <button key={level} onClick={() => onNavigateToWords?.(level)}
+            style={{ background: 'var(--bg-elev)', border: `2px solid ${CEFR_COLORS[level]}33`, borderRadius: 'var(--radius)', padding: '14px 12px', textAlign: 'center', boxShadow: 'var(--shadow-sm)', cursor: onNavigateToWords ? 'pointer' : 'default', transition: 'border-color .16s, transform .14s', fontFamily: 'inherit' }}
+            onMouseEnter={(e) => { if (onNavigateToWords) { e.currentTarget.style.borderColor = CEFR_COLORS[level]; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${CEFR_COLORS[level]}33`; e.currentTarget.style.transform = 'none'; }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: CEFR_COLORS[level], letterSpacing: '-.01em' }}>{counts[level]}</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: CEFR_COLORS[level], marginTop: 2 }}>{level}</div>
             <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{CEFR_LABELS[level].split(' · ')[1]}</div>
-          </div>
+          </button>
         ))}
       </div>
 
