@@ -113,18 +113,79 @@ async function extractPdf(file) {
   return { title: title.slice(0, 120), body };
 }
 
+// Extract text from an EPUB file using JSZip
+async function extractEpub(file) {
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+
+  // 1. Find OPF path from container.xml
+  const containerXml = await zip.file('META-INF/container.xml')?.async('text');
+  if (!containerXml) throw new Error('invalid epub');
+  const containerDoc = new DOMParser().parseFromString(containerXml, 'application/xml');
+  const opfPath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
+  if (!opfPath) throw new Error('no opf');
+
+  // 2. Parse OPF for title + spine
+  const opfXml = await zip.file(opfPath)?.async('text');
+  if (!opfXml) throw new Error('no opf file');
+  const opfDoc = new DOMParser().parseFromString(opfXml, 'application/xml');
+  const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  const rawTitle = opfDoc.querySelector('metadata > *|title, metadata title')?.textContent?.trim()
+    || file.name.replace(/\.epub$/i, '').replace(/[-_]+/g, ' ').trim();
+
+  // Build manifest id→href map
+  const manifest = {};
+  opfDoc.querySelectorAll('manifest item').forEach((el) => {
+    manifest[el.getAttribute('id')] = el.getAttribute('href');
+  });
+
+  // Spine order
+  const spine = [...opfDoc.querySelectorAll('spine itemref')]
+    .map((el) => el.getAttribute('idref'))
+    .filter(Boolean);
+
+  // 3. Extract text from each chapter in spine order
+  const paragraphs = [];
+  for (const idref of spine) {
+    const href = manifest[idref];
+    if (!href) continue;
+    // href may include a fragment (#anchor) — strip it
+    const cleanHref = href.split('#')[0];
+    const chapterPath = opfDir + cleanHref;
+    const chapterHtml = await zip.file(chapterPath)?.async('text');
+    if (!chapterHtml) continue;
+
+    const doc = new DOMParser().parseFromString(chapterHtml, 'text/html');
+    ['nav', 'aside', 'script', 'style', 'figure', 'figcaption'].forEach((tag) => {
+      doc.querySelectorAll(tag).forEach((el) => el.remove());
+    });
+    const body = doc.querySelector('body') || doc.documentElement;
+    [...body.querySelectorAll('p, h1, h2, h3, h4, li')]
+      .map((el) => el.textContent.trim())
+      .filter((t) => t.length > 15)
+      .forEach((t) => paragraphs.push(t));
+  }
+
+  if (!paragraphs.length) throw new Error('no text extracted');
+  return { title: rawTitle.slice(0, 120), body: paragraphs.join('\n\n') };
+}
+
 export default function NewText({ onSave, onCancel, t, editingText }) {
   const isEditing = !!editingText;
-  const [tab, setTab] = useState('write'); // 'write' | 'url' | 'pdf'
+  const [tab, setTab] = useState('write'); // 'write' | 'url' | 'pdf' | 'epub'
   const [title, setTitle] = useState(editingText?.title || '');
   const [body, setBody] = useState(editingText?.body || '');
   const [textLang, setTextLang] = useState(editingText?.language || 'en');
   const [urlInput, setUrlInput] = useState('');
   const [urlState, setUrlState] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
-  const [pdfState, setPdfState] = useState('idle'); // 'idle' | 'loading' | 'success' | 'error'
+  const [pdfState, setPdfState] = useState('idle');
   const [pdfDrag, setPdfDrag] = useState(false);
+  const [epubState, setEpubState] = useState('idle');
+  const [epubDrag, setEpubDrag] = useState(false);
   const taRef = useRef(null);
   const fileInputRef = useRef(null);
+  const epubInputRef = useRef(null);
 
   const wc = wordCount(body);
   const chars = body.length;
@@ -166,9 +227,28 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
   const handlePdfDrop = useCallback((e) => {
     e.preventDefault();
     setPdfDrag(false);
-    const file = e.dataTransfer.files[0];
-    handlePdfFile(file);
+    handlePdfFile(e.dataTransfer.files[0]);
   }, [handlePdfFile]);
+
+  const handleEpubFile = useCallback(async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.epub')) return;
+    setEpubState('loading');
+    try {
+      const { title: t2, body: b2 } = await extractEpub(file);
+      setTitle(t2 || title);
+      setBody(b2);
+      setEpubState('success');
+      setTab('write');
+    } catch {
+      setEpubState('error');
+    }
+  }, [title]);
+
+  const handleEpubDrop = useCallback((e) => {
+    e.preventDefault();
+    setEpubDrag(false);
+    handleEpubFile(e.dataTransfer.files[0]);
+  }, [handleEpubFile]);
 
   const pageTitle = isEditing ? t('newText.edit_title') : t('newText.title');
   const pageSubtitle = isEditing ? t('newText.edit_subtitle') : t('newText.subtitle');
@@ -185,7 +265,7 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
       {/* Tab bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', background: 'var(--bg-sunk)', borderRadius: 'var(--radius-sm)', padding: 3, gap: 2, border: '1px solid var(--border)' }}>
-          {[{ id: 'write', icon: 'doc', label: t('newText.tab_write') }, { id: 'url', icon: 'link', label: t('newText.tab_url') }, { id: 'pdf', icon: 'download', label: t('newText.tab_pdf') }].map((tb) => {
+          {[{ id: 'write', icon: 'doc', label: t('newText.tab_write') }, { id: 'url', icon: 'link', label: t('newText.tab_url') }, { id: 'pdf', icon: 'download', label: t('newText.tab_pdf') }, { id: 'epub', icon: 'book', label: t('newText.tab_epub') }].map((tb) => {
             const active = tab === tb.id;
             return (
               <button key={tb.id} onClick={() => setTab(tb.id)} style={{
@@ -302,6 +382,46 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
           {pdfState === 'error' && (
             <div style={{ marginTop: 12, fontSize: 13.5, color: '#c0392b', background: 'color-mix(in srgb,#c0392b 10%,transparent)', padding: '9px 14px', borderRadius: 'var(--radius-sm)' }}>
               {t('newText.pdf_error')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EPUB import tab */}
+      {tab === 'epub' && (
+        <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 22, boxShadow: 'var(--shadow-sm)', marginBottom: 18 }}>
+          <input ref={epubInputRef} type="file" accept=".epub" style={{ display: 'none' }}
+            onChange={(e) => handleEpubFile(e.target.files[0])} />
+          <div
+            onClick={() => epubState !== 'loading' && epubInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setEpubDrag(true); }}
+            onDragLeave={() => setEpubDrag(false)}
+            onDrop={handleEpubDrop}
+            style={{
+              border: `2px dashed ${epubDrag ? 'var(--accent)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-sm)',
+              background: epubDrag ? 'var(--accent-soft)' : 'var(--bg-sunk)',
+              padding: '40px 24px', textAlign: 'center',
+              cursor: epubState === 'loading' ? 'wait' : 'pointer',
+              transition: 'all .16s',
+            }}>
+            {epubState === 'loading' ? (
+              <>
+                <Icon name="loader" size={32} style={{ color: 'var(--accent)', marginBottom: 12 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{t('newText.epub_extracting')}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 4 }}>{t('newText.epub_extracting_hint')}</div>
+              </>
+            ) : (
+              <>
+                <Icon name="book" size={32} style={{ color: 'var(--accent)', marginBottom: 12 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{t('newText.epub_drop')}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 4 }}>{t('newText.epub_drop_hint')}</div>
+              </>
+            )}
+          </div>
+          {epubState === 'error' && (
+            <div style={{ marginTop: 12, fontSize: 13.5, color: '#c0392b', background: 'color-mix(in srgb,#c0392b 10%,transparent)', padding: '9px 14px', borderRadius: 'var(--radius-sm)' }}>
+              {t('newText.epub_error')}
             </div>
           )}
         </div>
