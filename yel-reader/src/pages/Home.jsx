@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Icon, Button, Skel, DeleteButton, PageHeader, EmptyState, IconButton } from '../components/ui.jsx';
 import { preview, wordCount, relativeTime, readingTime } from '../utils/storage.js';
 
-function TextCard({ text, onOpen, onDelete, onEdit, index }) {
+function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
   const [hover, setHover] = useState(false);
   const wc = wordCount(text.body);
   return (
@@ -47,6 +47,11 @@ function TextCard({ text, onOpen, onDelete, onEdit, index }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-faint)', fontWeight: 500 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="book" size={14} /> {wc.toLocaleString()} words</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="clock" size={14} /> {readingTime(wc)}</span>
+        {noteCount > 0 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto', color: 'var(--accent)', fontWeight: 600 }}>
+            <Icon name="note" size={13} /> {noteCount}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -74,7 +79,7 @@ const SORTS = [
   { id: 'longest', labelKey: 'library.sort_longest' },
 ];
 
-export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, t }) {
+export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, t, notes }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('newest');
   const [focus, setFocus] = useState(false);
@@ -174,7 +179,8 @@ export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, 
       ) : (
         <div style={grid}>
           {processed.map((text, i) => (
-            <TextCard key={text.id} text={text} index={i} onOpen={() => onOpen(text.id)} onDelete={() => onDelete(text.id)} onEdit={() => onEdit(text.id)} />
+            <TextCard key={text.id} text={text} index={i} onOpen={() => onOpen(text.id)} onDelete={() => onDelete(text.id)} onEdit={() => onEdit(text.id)}
+              noteCount={Object.values(notes || {}).filter((n) => n.textId === text.id).length} />
           ))}
         </div>
       )}

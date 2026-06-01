@@ -357,7 +357,7 @@ export default function App() {
 
   let page;
   if (view === 'library') {
-    page = <Home texts={texts} loading={booting} onOpen={openText} onDelete={deleteText} onEdit={startEdit} onNew={() => goTo('new')} t={t} />;
+    page = <Home texts={texts} loading={booting} onOpen={openText} onDelete={deleteText} onEdit={startEdit} onNew={() => goTo('new')} t={t} notes={notes} />;
   } else if (view === 'new' || view === 'edit') {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
