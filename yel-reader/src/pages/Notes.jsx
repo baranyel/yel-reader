@@ -10,13 +10,14 @@ function ImportanceBadge({ level }) {
   const imp = NOTE_IMPORTANCE.find((i) => i.id === level);
   if (!imp) return null;
   const colors = ['', '#f97316', '#ef4444', '#7c3aed'];
-  const bg     = ['', '#ffedd5', '#fee2e2', '#f3e8ff'];
+  const c = colors[level];
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', fontSize: 11.5, fontWeight: 800,
       padding: '1px 7px', borderRadius: 99,
-      color: colors[level], background: bg[level],
-      border: `1px solid ${colors[level]}44`,
+      color: c,
+      background: `color-mix(in srgb, ${c} 14%, var(--bg-elev))`,
+      border: `1px solid color-mix(in srgb, ${c} 35%, transparent)`,
     }}>
       {imp.label}
     </span>
@@ -73,7 +74,9 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, t }) {
 
   return (
     <div style={{
-      background: expanded && colorObj ? colorObj.bg : 'var(--bg-elev)',
+      background: expanded && colorObj
+        ? `color-mix(in srgb, ${colorObj.dot} 10%, var(--bg-elev))`
+        : 'var(--bg-elev)',
       border: '1px solid var(--border)',
       borderLeft,
       borderRadius: 'var(--radius)',
