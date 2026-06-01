@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/yel-reader/sw.js', { scope: '/yel-reader/' })})}
