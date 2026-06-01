@@ -409,7 +409,7 @@ export default function App() {
   } else if (view === 'words') {
     page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} initialCefrFilter={wordsCefrFilter} onCefrFilterClear={() => setWordsCefrFilter(null)} t={t} />;
   } else if (view === 'progress') {
-    page = <Progress words={words} t={t}
+    page = <Progress words={words} texts={texts} reads={reads} t={t}
       onWordsUpdated={(updated) => persistWords(updated)}
       onNavigateToWords={(level) => { setWordsCefrFilter(level); goTo('words'); }} />;
   } else if (view === 'quiz') {

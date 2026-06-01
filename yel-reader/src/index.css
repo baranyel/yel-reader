@@ -72,6 +72,30 @@ button { font-family: inherit; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes slideInRight { from { opacity: 0; transform: translateX(32px); } to { opacity: 1; transform: none; } }
 
+@keyframes confettiFall {
+  0%   { transform: translateX(0)    translateY(-24px) rotate(0deg);   opacity: 1; }
+  20%  { transform: translateX(14px) translateY(20vh)  rotate(100deg); }
+  50%  { transform: translateX(-8px) translateY(52vh)  rotate(300deg); opacity: 0.9; }
+  80%  { transform: translateX(10px) translateY(80vh)  rotate(520deg); opacity: 0.4; }
+  100% { transform: translateX(-6px) translateY(110vh) rotate(600deg); opacity: 0; }
+}
+@keyframes confettiFallR {
+  0%   { transform: translateX(0)     translateY(-24px) rotate(0deg);    opacity: 1; }
+  20%  { transform: translateX(-14px) translateY(20vh)  rotate(-100deg); }
+  50%  { transform: translateX(8px)   translateY(52vh)  rotate(-300deg); opacity: 0.9; }
+  80%  { transform: translateX(-10px) translateY(80vh)  rotate(-520deg); opacity: 0.4; }
+  100% { transform: translateX(6px)   translateY(110vh) rotate(-600deg); opacity: 0; }
+}
+@keyframes flamePulse {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25%       { transform: scale(1.18) rotate(-6deg); }
+  75%       { transform: scale(1.12) rotate(5deg); }
+}
+@keyframes streakCountIn {
+  from { transform: scale(0.4) rotate(-10deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0deg);     opacity: 1; }
+}
+
 .skel {
   background: var(--skeleton);
   background-size: 800px 100%;
