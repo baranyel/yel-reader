@@ -8,10 +8,12 @@ import Quiz from './pages/Quiz.jsx';
 import Review from './pages/Review.jsx';
 import Settings from './pages/Settings.jsx';
 import Notes from './pages/Notes.jsx';
+import Progress from './pages/Progress.jsx';
 import {
   load, save, ensureSeeded, uid, logRead,
   TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, READS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, SETTINGS_DEFAULTS,
 } from './utils/storage.js';
+import { getCefrLevel } from './utils/cefrWords.js';
 import { getT } from './utils/i18n.js';
 
 const FONT_MAP = {
@@ -194,6 +196,7 @@ export default function App() {
     { id: 'new', label: t('nav.new'), icon: 'plus' },
     { id: 'words', label: t('nav.words'), icon: 'words' },
     { id: 'notes', label: t('nav.notes'), icon: 'note', badge: noteCount || null },
+    { id: 'progress', label: t('nav.progress'), icon: 'chart' },
     { id: 'review', label: t('nav.review'), icon: 'repeat', badge: dueCount || null },
     { id: 'settings', label: t('nav.settings'), icon: 'settings' },
   ];
@@ -244,7 +247,7 @@ export default function App() {
   const persistWords = (next) => { setWords(next); save(WORDS_KEY, next); };
 
   const goTo = (v) => {
-    if (['library', 'words', 'new', 'settings', 'quiz', 'review', 'notes'].includes(v)) {
+    if (['library', 'words', 'new', 'settings', 'quiz', 'review', 'notes', 'progress'].includes(v)) {
       if (v === 'new') setEditingId(null);
       setView(v);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -300,7 +303,7 @@ export default function App() {
       toast({ message: t('toast.word_dupe', word), icon: 'bookmark' });
       return;
     }
-    persistWords([{
+    const entry = {
       word,
       sourceId: sourceText.id,
       sourceTitle: sourceText.title,
@@ -310,13 +313,22 @@ export default function App() {
       example: defData?.example || null,
       lang: defData?.lang || 'en',
       note: null,
-      // SM-2 initialization — review after 1 day
+      cefr: null,
       sm2_interval: 1,
       sm2_repetition: 0,
       sm2_efactor: 2.5,
       sm2_nextReview: Date.now() + 24 * 60 * 60 * 1000,
-    }, ...words]);
+    };
+    persistWords([entry, ...words]);
     toast({ message: t('toast.word_saved', word), icon: 'bookmark' });
+    // Async CEFR lookup — updates word in place once resolved
+    getCefrLevel(word).then((level) => {
+      if (level) setWords((prev) => {
+        const next = prev.map((w) => w.word === word && !w.cefr ? { ...w, cefr: level } : w);
+        save(WORDS_KEY, next);
+        return next;
+      });
+    }).catch(() => {});
   };
 
   const deleteWord = (word) => {
@@ -362,6 +374,9 @@ export default function App() {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
     page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
+  } else if (view === 'progress') {
+    page = <Progress words={words} t={t}
+      onWordsUpdated={(updated) => persistWords(updated)} />;
   } else if (view === 'quiz') {
     page = <Quiz words={words} onBack={() => goTo('words')} t={t} />;
   } else if (view === 'review') {
