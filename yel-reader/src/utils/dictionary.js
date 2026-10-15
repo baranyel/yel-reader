@@ -139,6 +139,14 @@ async function lookupNative(clean, context, nativeLang) {
   return { ...(english || notFound(clean)), lang: 'en', fallback: true };
 }
 
+// Translate a phrase or sentence (cached, so it also works offline for text seen before).
+// Resolves to the translation, or null if no translation service could be reached.
+export async function translatePhrase(text, { from = 'en', to = 'tr' } = {}) {
+  const clean = (text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  if (!clean) return null;
+  return translate(clean, from, to);
+}
+
 // --- Dictionary helpers ------------------------------------------------------
 
 // Words the API said it does not know (this session only; the API may learn them later).

@@ -5,11 +5,12 @@ export const SETTINGS_KEY = 'yelreader.settings.v1';
 export const HIGHLIGHTS_KEY = 'yelreader.highlights.v1';
 export const PROGRESS_KEY = 'yelreader.progress.v1';
 export const NOTES_KEY = 'yelreader.notes.v1';
+export const KNOWN_KEY = 'yelreader.known.v1';
 const SEEDED_KEY = 'yelreader.seeded.v1';
 
 export const ALL_STORAGE_KEYS = [
   TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY,
-  HIGHLIGHTS_KEY, PROGRESS_KEY, NOTES_KEY,
+  HIGHLIGHTS_KEY, PROGRESS_KEY, NOTES_KEY, KNOWN_KEY,
 ];
 
 export function saveNote(note) {
@@ -34,6 +35,7 @@ export const SETTINGS_DEFAULTS = {
   popupShowExample: true,
   popupShowSynonyms: true,
   popupShowAntonyms: true,
+  hintLevel: 'off', // 'off' | 'A2' | 'B1' | 'B2' — hint words rarer than this level
 };
 
 export function load(key, fallback) {
@@ -127,9 +129,10 @@ const SEED_TEXTS = [
 
 const SEED_WORDS = [];
 
-export function saveProgress(textId, page) {
+// Reading position: page index plus how far (0..1) the reader had scrolled within that page.
+export function saveProgress(textId, page, scroll = 0) {
   const all = load(PROGRESS_KEY, {});
-  all[textId] = { page, updatedAt: Date.now() };
+  all[textId] = { page, scroll, updatedAt: Date.now() };
   save(PROGRESS_KEY, all);
 }
 

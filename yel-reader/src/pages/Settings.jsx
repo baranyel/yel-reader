@@ -324,6 +324,23 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t }) 
         </SettingRow>
       </SettingCard>
 
+      {/* Reading aids */}
+      <SettingCard>
+        <SettingRow label={t('settings.hint_title')} hint={t('settings.hint_desc')} last>
+          <SegControl
+            small
+            value={settings.hintLevel || 'off'}
+            onChange={(v) => setSetting('hintLevel', v)}
+            options={[
+              { value: 'off', label: t('settings.hint_off') },
+              { value: 'A2', label: 'A2' },
+              { value: 'B1', label: 'B1' },
+              { value: 'B2', label: 'B2' },
+            ]}
+          />
+        </SettingRow>
+      </SettingCard>
+
       {/* Appearance section */}
       <Section label={t('settings.s_appearance')} />
       <SettingCard>
@@ -405,7 +422,7 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t }) 
       {/* Privacy note */}
       <Section label={t('settings.privacy_title')} />
       <p style={{ margin: '0 0 24px', fontSize: 13, lineHeight: 1.65, color: 'var(--text-faint)' }}>
-        {t('settings.privacy_note')}
+        {t('settings.privacy_note')} {t('settings.credits')}
       </p>
     </div>
   );

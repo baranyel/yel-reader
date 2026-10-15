@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Icon, Button, Skel, DeleteButton, PageHeader, EmptyState, IconButton } from '../components/ui.jsx';
+import { Icon, Button, DeleteButton, PageHeader, EmptyState, IconButton } from '../components/ui.jsx';
 import { preview, wordCount, relativeTime, readingTime } from '../utils/storage.js';
 
 function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
@@ -57,29 +57,13 @@ function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
   );
 }
 
-function CardSkeleton() {
-  return (
-    <div style={{ padding: 22, background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', minHeight: 188, display: 'flex', flexDirection: 'column' }}>
-      <Skel w={30} h={30} r={8} style={{ marginBottom: 14 }} />
-      <Skel w="72%" h={17} style={{ marginBottom: 12 }} />
-      <Skel w="100%" h={11} style={{ marginBottom: 7 }} />
-      <Skel w="92%" h={11} style={{ marginBottom: 7 }} />
-      <Skel w="60%" h={11} />
-      <div style={{ flex: 1 }} />
-      <div style={{ display: 'flex', gap: 12, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-        <Skel w={70} h={11} /><Skel w={70} h={11} />
-      </div>
-    </div>
-  );
-}
-
 const SORTS = [
   { id: 'newest', labelKey: 'library.sort_newest' },
   { id: 'oldest', labelKey: 'library.sort_oldest' },
   { id: 'longest', labelKey: 'library.sort_longest' },
 ];
 
-export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, t, notes }) {
+export default function Home({ texts, onOpen, onDelete, onEdit, onNew, t, notes }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('newest');
   const [focus, setFocus] = useState(false);
@@ -102,11 +86,9 @@ export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, 
 
   const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 18 };
 
-  const subtitle = loading
-    ? t('library.loading')
-    : query.trim()
-      ? `${processed.length} / ${texts.length}`
-      : t('library.subtitle', texts.length);
+  const subtitle = query.trim()
+    ? `${processed.length} / ${texts.length}`
+    : t('library.subtitle', texts.length);
 
   return (
     <div>
@@ -117,7 +99,7 @@ export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, 
       />
 
       {/* Search + Sort bar */}
-      {!loading && texts.length > 0 && (
+      {texts.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
           {/* Search input */}
           <div style={{
@@ -162,9 +144,7 @@ export default function Home({ texts, loading, onOpen, onDelete, onEdit, onNew, 
       )}
 
       {/* Content */}
-      {loading ? (
-        <div style={grid}>{Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}</div>
-      ) : texts.length === 0 ? (
+      {texts.length === 0 ? (
         <EmptyState
           icon="library"
           title={t('library.empty_title')}

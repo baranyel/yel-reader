@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Icon, Button, Skel } from '../components/ui.jsx';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, memo } from 'react';
+import { Icon, Button } from '../components/ui.jsx';
 import WordPopup from '../components/WordPopup.jsx';
 import NoteEditor from '../components/NoteEditor.jsx';
+import PhrasePopup from '../components/PhrasePopup.jsx';
+import { ReadProgressRing } from '../components/ReadProgress.jsx';
 import { wordCount, relativeTime, readingTime, saveProgress, getProgress, saveNote, deleteNote } from '../utils/storage.js';
 import { cleanWord, extractSentence, tokenize } from '../utils/text.js';
 import { matchesSaved } from '../utils/lemma.js';
+import { resolveResume } from '../utils/resume.js';
+import { loadWordRanks, isRarerThan } from '../utils/wordRank.js';
+import { HINT_LEVELS } from '../utils/wordRankCore.js';
 
 // ---- Pagination -------------------------------------------------------------
 const WORDS_PER_PAGE = 900;
@@ -70,40 +75,57 @@ function ParagraphContextMenu({ x, y, hasNote, onAddNote, onEditNote, onDeleteNo
 }
 
 // ---- Reading body -----------------------------------------------------------
-function ReadingBody({ paragraphs, pageStartIndex, savedSet, activeKey, onWord, highlightMap, noteIndices, onContextMenu }) {
-  let counter = 0;
+// Should this word get a "probably new" hint? Only lower-case words (names are skipped),
+// never saved or known ones.
+function isHinted(text, base, hint) {
+  return /^\p{Ll}/u.test(text) && base.length >= 3
+    && !matchesSaved(hint.knownSet, base)
+    && isRarerThan(base, hint.cap);
+}
+
+// One paragraph. Memoised: tapping a word or scrolling re-renders only what changed.
+const Paragraph = memo(function Paragraph({ para, globalIdx, savedSet, activeKey, highlightMap, hasNote, hint, onWord, onContextMenu }) {
+  const tokens = useMemo(() => tokenize(para), [para]);
+  return (
+    <p style={{ margin: '0 0 1.25em', textWrap: 'pretty', position: 'relative' }}
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu(e.clientX, e.clientY, globalIdx, para); }}>
+      {hasNote && (
+        <span style={{ position: 'absolute', left: -24, top: 5, color: 'var(--accent)', opacity: .8, cursor: 'pointer' }}
+          onClick={(e) => { e.stopPropagation(); onContextMenu(e.clientX, e.clientY, globalIdx, para); }}>
+          <Icon name="note" size={14} />
+        </span>
+      )}
+      {tokens.map((tok, ti) => {
+        if (!tok.word) return <span key={ti}>{tok.text}</span>;
+        const base = cleanWord(tok.text);
+        const key = globalIdx + ':' + ti;
+        const saved = matchesSaved(savedSet, base);
+        const hlColor = highlightMap?.[base];
+        const cls = 'rw'
+          + (saved ? ' saved' : hint && isHinted(tok.text, base, hint) ? ' hint' : '')
+          + (activeKey === key ? ' active' : '')
+          + (hlColor ? ` hl-${hlColor}` : '');
+        return (
+          <span key={key} className={cls} onClick={(e) => onWord(e.currentTarget, tok.text, key, para)}>
+            {tok.text}
+          </span>
+        );
+      })}
+    </p>
+  );
+});
+
+function ReadingBody({ paragraphs, pageStartIndex, savedSet, active, onWord, highlightMap, noteIndices, hint, onContextMenu }) {
   return (
     <div style={{ fontFamily: 'var(--reading-font)', fontSize: 'var(--reading-size)', lineHeight: 1.8, color: 'var(--text)', letterSpacing: '.002em' }}>
       {paragraphs.map((para, pi) => {
         const globalIdx = pageStartIndex + pi;
-        const hasNote = noteIndices.has(globalIdx);
-        const tokens = tokenize(para);
         return (
-          <p key={pi} style={{ margin: '0 0 1.25em', textWrap: 'pretty', position: 'relative' }}
-            onContextMenu={(e) => { e.preventDefault(); onContextMenu(e.clientX, e.clientY, globalIdx, para); }}>
-            {hasNote && (
-              <span style={{ position: 'absolute', left: -24, top: 5, color: 'var(--accent)', opacity: .8, cursor: 'pointer' }}
-                onClick={(e) => { e.stopPropagation(); onContextMenu(e.clientX, e.clientY, globalIdx, para); }}>
-                <Icon name="note" size={14} />
-              </span>
-            )}
-            {tokens.map((tok, ti) => {
-              if (tok.word) {
-                const base = cleanWord(tok.text);
-                const key = 'w' + (counter++);
-                const hlColor = highlightMap?.[base];
-                const hlClass = hlColor ? ` hl-${hlColor}` : '';
-                const cls = 'rw' + (matchesSaved(savedSet, base) ? ' saved' : '') + (activeKey === key ? ' active' : '') + hlClass;
-                return (
-                  <span key={key} data-wkey={key} className={cls}
-                    onClick={(e) => onWord(e.currentTarget, tok.text, key, para)}>
-                    {tok.text}
-                  </span>
-                );
-              }
-              return <span key={'s' + pi + '_' + ti}>{tok.text}</span>;
-            })}
-          </p>
+          <Paragraph key={globalIdx} para={para} globalIdx={globalIdx}
+            savedSet={savedSet}
+            activeKey={active && active.key.startsWith(globalIdx + ':') ? active.key : null}
+            highlightMap={highlightMap} hasNote={noteIndices.has(globalIdx)} hint={hint}
+            onWord={onWord} onContextMenu={onContextMenu} />
         );
       })}
     </div>
@@ -112,13 +134,18 @@ function ReadingBody({ paragraphs, pageStartIndex, savedSet, activeKey, onWord, 
 
 // ---- Main component ---------------------------------------------------------
 export default function ReadText({
-  text, savedWords, onSaveWord, onBack, loading, progress, t, definitionOptions,
+  text, savedWords, onSaveWord, onBack, scrollRef, t, definitionOptions,
   highlights, onHighlight, onUpdateNote, onPageChange, notes, onNoteSaved, onNoteDeleted,
+  knownSet, onMarkKnown, onUnmarkKnown, hintLevel,
 }) {
   const [active, setActive] = useState(null);
   const [ctxMenu, setCtxMenu] = useState(null);
   const [noteEditor, setNoteEditor] = useState(null);
-  const [showTapHint, setShowTapHint] = useState(() => !localStorage.getItem('tapHintSeen'));
+  const [showTapHint, setShowTapHint] = useState(() => {
+    try { return !localStorage.getItem('tapHintSeen'); } catch { return false; }
+  });
+  const [ranksReady, setRanksReady] = useState(false);
+  const bodyRef = useRef(null);
 
   const allParagraphs = useMemo(
     () => text.body.split(/\n+/).filter((p) => p.trim().length > 0),
@@ -128,15 +155,10 @@ export default function ReadText({
   const totalPages = pages.length;
   const isPaginated = totalPages > 1;
 
-  const [currentPage, setCurrentPage] = useState(() => {
-    const saved = getProgress(text.id);
-    return saved ? Math.min(saved.page, totalPages - 1) : 0;
-  });
-
-  const [resumeBanner, setResumeBanner] = useState(() => {
-    const saved = getProgress(text.id);
-    return saved && saved.page > 0 ? saved.page + 1 : null;
-  });
+  // Where to continue (computed once per text, when it is opened).
+  const resume = useMemo(() => resolveResume(getProgress(text.id), totalPages), [text.id]); // eslint-disable-line
+  const [currentPage, setCurrentPage] = useState(() => resume?.page ?? 0);
+  const [resumeBanner, setResumeBanner] = useState(() => (resume ? Math.round(resume.overall * 100) : null));
 
   useEffect(() => {
     if (!resumeBanner) return;
@@ -144,11 +166,53 @@ export default function ReadText({
     return () => clearTimeout(id);
   }, [resumeBanner]);
 
+  // Restore the scroll position once, right after the first paint of this text.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !resume) return;
+    el.scrollTop = resume.scroll * Math.max(0, el.scrollHeight - el.clientHeight);
+  }, []); // eslint-disable-line
+
+  // Remember the position while reading (throttled; also when the tab is hidden or closed).
+  const pageRef = useRef(currentPage);
+  pageRef.current = currentPage;
+  const lastScroll = useRef(resume?.scroll ?? 0);
   useEffect(() => {
-    if (isPaginated) saveProgress(text.id, currentPage);
-  }, [text.id, currentPage, isPaginated]);
+    const el = scrollRef.current;
+    if (!el) return;
+    let timer = null;
+    const flush = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      saveProgress(text.id, pageRef.current, lastScroll.current);
+    };
+    const onScroll = () => {
+      const max = el.scrollHeight - el.clientHeight;
+      lastScroll.current = max > 0 ? Math.min(1, Math.max(0, el.scrollTop / max)) : 0;
+      if (!timer) timer = setTimeout(flush, 500);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('pagehide', flush);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      window.removeEventListener('pagehide', flush);
+      if (timer) flush();
+    };
+  }, [scrollRef, text.id]);
 
   useEffect(() => { setActive(null); setCtxMenu(null); }, [text?.id, currentPage]);
+
+  // Load the frequency list only when "new word" hints are switched on.
+  useEffect(() => {
+    if (!hintLevel || hintLevel === 'off') return;
+    let alive = true;
+    loadWordRanks().then(() => { if (alive) setRanksReady(true); }).catch(() => {});
+    return () => { alive = false; };
+  }, [hintLevel]);
+
+  const hint = useMemo(
+    () => (ranksReady && HINT_LEVELS[hintLevel] ? { cap: HINT_LEVELS[hintLevel], knownSet } : null),
+    [ranksReady, hintLevel, knownSet]
+  );
 
   const pageStartIndex = useMemo(() => {
     let idx = 0;
@@ -170,18 +234,30 @@ export default function ReadText({
   const handleWord = useCallback((el, tok, key, paragraphText) => {
     const context = extractSentence(paragraphText, tok);
     setActive((cur) => (cur && cur.key === key ? null : { el, word: tok, key, context }));
-    if (showTapHint) {
-      setShowTapHint(false);
-      localStorage.setItem('tapHintSeen', '1');
-    }
-  }, [showTapHint]);
+    setShowTapHint(false);
+    try { localStorage.setItem('tapHintSeen', '1'); } catch {}
+  }, []);
 
   const goToPage = useCallback((idx) => {
     setCurrentPage(idx);
+    lastScroll.current = 0;
     setActive(null);
     setCtxMenu(null);
     onPageChange?.();
-  }, [onPageChange]);
+    saveProgress(text.id, idx, 0);
+  }, [onPageChange, text.id]);
+
+  // ← / → turn pages (not while typing in a note).
+  useEffect(() => {
+    if (!isPaginated || noteEditor) return;
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, [contenteditable]')) return;
+      if (e.key === 'ArrowRight' && currentPage < totalPages - 1) goToPage(currentPage + 1);
+      else if (e.key === 'ArrowLeft' && currentPage > 0) goToPage(currentPage - 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPaginated, noteEditor, currentPage, totalPages, goToPage]);
 
   const handleContextMenu = useCallback((x, y, paraIdx, paraText) => {
     setActive(null);
@@ -204,27 +280,14 @@ export default function ReadText({
     setNoteEditor(null);
   }, [noteEditor, onNoteDeleted]);
 
-  const overallPct = isPaginated
-    ? Math.round(((currentPage + progress) / totalPages) * 100)
-    : Math.round(progress * 100);
-
-  const savedSet = new Set(savedWords.map((w) => w.word));
-  const noteMap = Object.fromEntries(savedWords.filter(w => w.note).map(w => [w.word, w.note]));
+  const savedSet = useMemo(() => new Set(savedWords.map((w) => w.word)), [savedWords]);
+  const noteMap = useMemo(
+    () => Object.fromEntries(savedWords.filter((w) => w.note).map((w) => [w.word, w.note])),
+    [savedWords]
+  );
   const activeClean = active ? cleanWord(active.word) : null;
   const pageParas = pages[currentPage] || [];
   const totalWc = wordCount(text.body);
-
-  if (loading) {
-    return (
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '12px 0 80px' }}>
-        <Skel w={90} h={20} style={{ marginBottom: 30 }} />
-        <Skel w="80%" h={34} style={{ marginBottom: 28 }} />
-        {Array.from({ length: 9 }).map((_, i) => (
-          <Skel key={i} w={i % 4 === 3 ? '55%' : '100%'} h={15} style={{ marginBottom: 16 }} />
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -239,19 +302,8 @@ export default function ReadText({
                 {t('readText.page_of', currentPage + 1, totalPages)}
               </span>
             )}
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: 'var(--text-faint)' }}>
-              <span style={{ position: 'relative', width: 22, height: 22 }}>
-                <svg width="22" height="22" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
-                  <circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" strokeWidth="4" />
-                  <circle cx="18" cy="18" r="15" fill="none" stroke="var(--accent)" strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeDasharray={2 * Math.PI * 15}
-                    strokeDashoffset={2 * Math.PI * 15 * (1 - (isPaginated ? (currentPage + progress) / totalPages : progress))}
-                    style={{ transition: 'stroke-dashoffset .12s linear' }} />
-                </svg>
-              </span>
-              {t('readText.pct', overallPct)}
-            </span>
+            <ReadProgressRing scrollRef={scrollRef} currentPage={currentPage} totalPages={totalPages}
+              label={(pct) => t('readText.pct', pct)} />
           </div>
         </div>
 
@@ -259,7 +311,7 @@ export default function ReadText({
         {resumeBanner && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 20, padding: '9px 14px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb,var(--accent) 30%,transparent)', borderRadius: 'var(--radius)', fontSize: 13.5, color: 'var(--accent)', fontWeight: 500, animation: 'fadeUp .3s ease' }}>
             <Icon name="bookmark" size={16} />
-            {t('readText.resume', resumeBanner)}
+            {t('readText.resume_pct', resumeBanner)}
           </div>
         )}
 
@@ -283,15 +335,16 @@ export default function ReadText({
         </header>
 
         {/* Reading body — left-padded for note indicators */}
-        <div style={{ paddingLeft: 28 }}>
+        <div ref={bodyRef} style={{ paddingLeft: 28 }}>
           <ReadingBody
             paragraphs={pageParas}
             pageStartIndex={pageStartIndex}
             savedSet={savedSet}
-            activeKey={active?.key}
+            active={active}
             onWord={handleWord}
             highlightMap={highlights}
             noteIndices={noteIndices}
+            hint={hint}
             onContextMenu={handleContextMenu}
           />
         </div>
@@ -329,8 +382,13 @@ export default function ReadText({
           onHighlight={onHighlight ? (color) => onHighlight(activeClean, color) : undefined}
           wordNote={noteMap[activeClean] || ''}
           onUpdateNote={onUpdateNote ? (note) => onUpdateNote(activeClean, note) : undefined}
+          isKnown={knownSet?.has(activeClean) ?? false}
+          onMarkKnown={onMarkKnown} onUnmarkKnown={onUnmarkKnown}
         />
       )}
+
+      {/* Translate a selected phrase or sentence */}
+      <PhrasePopup containerRef={bodyRef} from={text.language || 'en'} to={definitionOptions?.nativeLanguage || 'tr'} t={t} />
 
       {/* Paragraph context menu */}
       {ctxMenu && (

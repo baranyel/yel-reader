@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { Icon, Button } from './ui.jsx';
-import { lookupWord, cleanWord } from '../utils/dictionary.js';
+import { lookupWord, cleanWord, translatePhrase } from '../utils/dictionary.js';
 import { getCefrLevel, CEFR_COLORS } from '../utils/cefrWords.js';
 import { matchesSaved } from '../utils/lemma.js';
 
@@ -16,12 +16,14 @@ export default function WordPopup({
   definitionOptions, t,
   currentHighlight, onHighlight,       // highlight support (reading mode only)
   wordNote, onUpdateNote,              // note support (when saved)
+  isKnown, onMarkKnown, onUnmarkKnown, // "I know this word" support (reading mode only)
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cefrLevel, setCefrLevel] = useState(null);
   const [chainWord, setChainWord] = useState(null);
   const [noteText, setNoteText] = useState(wordNote || '');
+  const [sentence, setSentence] = useState({ status: 'idle', text: '' }); // idle | loading | done | error
   const ref = useRef(null);
   const [pos, setPos] = useState({ top: -9999, left: -9999, caretLeft: 28, placement: 'below', ready: false });
 
@@ -30,7 +32,7 @@ export default function WordPopup({
   const isSaved = savedSet ? matchesSaved(savedSet, clean) : false;
   const isSavedExact = savedSet?.has(clean) ?? false;
 
-  useEffect(() => { setChainWord(null); }, [word]);
+  useEffect(() => { setChainWord(null); setSentence({ status: 'idle', text: '' }); }, [word]);
   useEffect(() => { setNoteText(wordNote || ''); }, [wordNote, word]);
 
   useEffect(() => {
@@ -76,7 +78,7 @@ export default function WordPopup({
     setPos({ top, left, caretLeft, placement, ready: true });
   }, [targetEl]);
 
-  useLayoutEffect(() => { reposition(); }, [reposition, data, loading]);
+  useLayoutEffect(() => { reposition(); }, [reposition, data, loading, sentence]);
   useEffect(() => {
     const h = () => reposition();
     window.addEventListener('scroll', h, true);
@@ -100,6 +102,13 @@ export default function WordPopup({
   const playAudio = () => {
     if (!data?.audioUrl) return;
     new Audio(data.audioUrl).play().catch(() => {});
+  };
+
+  const translateSentence = () => {
+    setSentence({ status: 'loading', text: '' });
+    translatePhrase(context, { to: definitionOptions?.nativeLanguage || 'tr' })
+      .then((text) => setSentence({ status: text ? 'done' : 'error', text: text || '' }))
+      .catch(() => setSentence({ status: 'error', text: '' }));
   };
 
   const handleNoteBlur = () => {
@@ -231,7 +240,32 @@ export default function WordPopup({
         </p>
       )}
 
-      {/* Save button */}
+      {/* Sentence translation */}
+      {!loading && !chainWord && context && context.trim().split(/\s+/).length >= 3 && (
+        <div style={{ marginTop: 12 }}>
+          {sentence.status === 'idle' && (
+            <button onClick={translateSentence}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--accent)', background: 'transparent', border: 'none', padding: 0 }}>
+              <Icon name="globe" size={13} /> {t ? t('popup.translate_sentence') : 'Translate sentence'}
+            </button>
+          )}
+          {sentence.status === 'loading' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-faint)' }}>
+              <Icon name="loader" size={13} stroke={2} /> {t ? t('phrase.translating') : 'Translating…'}
+            </span>
+          )}
+          {sentence.status === 'done' && (
+            <p style={{ margin: 0, padding: '8px 10px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text)', background: 'var(--bg-sunk)', borderRadius: 'var(--radius-sm)' }}>
+              {sentence.text}
+            </p>
+          )}
+          {sentence.status === 'error' && (
+            <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{t ? t('phrase.failed') : 'Could not translate.'}</span>
+          )}
+        </div>
+      )}
+
+      {/* Save / "I know this" */}
       {!loading && (
         <div style={{ marginTop: 14 }}>
           {isSaved ? (
@@ -239,10 +273,28 @@ export default function WordPopup({
               <Icon name="check" size={17} stroke={2.2} />
               {t ? t('popup.saved') : 'Saved to My Words'}
             </div>
+          ) : isKnown && !chainWord ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 13.5, fontWeight: 600, color: 'var(--text-soft)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                <Icon name="check" size={16} stroke={2.2} /> {t ? t('popup.known_marked') : 'Marked as known'}
+              </span>
+              <button onClick={() => { onUnmarkKnown?.(clean); }}
+                style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent)', background: 'transparent', border: 'none', padding: '2px 4px' }}>
+                {t ? t('popup.unknow') : 'Undo'}
+              </button>
+            </div>
           ) : (
-            <Button variant="primary" icon="bookmark" onClick={() => onSave(clean, data)} style={{ width: '100%' }}>
-              {t ? t('popup.save') : 'Save Word'}
-            </Button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="primary" icon="bookmark" onClick={() => onSave(clean, data)} style={{ flex: 1 }}>
+                {t ? t('popup.save') : 'Save Word'}
+              </Button>
+              {onMarkKnown && !chainWord && (
+                <Button variant="secondary" onClick={() => { onMarkKnown(clean); onClose(); }}
+                  title={t ? t('popup.know_hint') : undefined}>
+                  {t ? t('popup.know') : 'I know it'}
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}

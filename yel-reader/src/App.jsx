@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { startEyeFavicon, stopEyeFavicon } from './utils/faviconEye.js';
 import { Icon, Logo, Button, IconButton, EmptyState, useToast } from './components/ui.jsx';
+import { ReadProgressBar } from './components/ReadProgress.jsx';
 import Home from './pages/Home.jsx';
 import NewText from './pages/NewText.jsx';
 import ReadText from './pages/ReadText.jsx';
@@ -10,8 +11,8 @@ import Review from './pages/Review.jsx';
 import Settings from './pages/Settings.jsx';
 import Notes from './pages/Notes.jsx';
 import {
-  load, save, ensureSeeded, removeLegacyKeys, uid,
-  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, SETTINGS_DEFAULTS,
+  load, save, uid,
+  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, KNOWN_KEY, SETTINGS_DEFAULTS,
 } from './utils/storage.js';
 import { getCefrLevel } from './utils/cefrWords.js';
 import { getT } from './utils/i18n.js';
@@ -21,6 +22,8 @@ const FONT_MAP = {
   Newsreader: "'Newsreader', Georgia, serif",
   Playfair: "'Playfair Display', Georgia, serif",
 };
+
+const NO_HIGHLIGHTS = {}; // stable reference so memoised paragraphs are not re-rendered
 
 const TWEAK_DEFAULTS = {
   accent: '#0F766E',
@@ -161,15 +164,13 @@ export default function App() {
   const [view, setView] = useState('library');
   const [currentId, setCurrentId] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [texts, setTexts] = useState([]);
-  const [words, setWords] = useState([]);
-  const [highlights, setHighlights] = useState({});
-  const [notes, setNotes] = useState({});
-  const [booting, setBooting] = useState(true);
-  const [readLoading, setReadLoading] = useState(false);
+  const [texts, setTexts] = useState(() => load(TEXTS_KEY, []));
+  const [words, setWords] = useState(() => load(WORDS_KEY, []));
+  const [highlights, setHighlights] = useState(() => load(HIGHLIGHTS_KEY, {}));
+  const [notes, setNotes] = useState(() => load(NOTES_KEY, {}));
+  const [known, setKnown] = useState(() => load(KNOWN_KEY, {}));
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 860);
-  const [progress, setProgress] = useState(0);
   const scrollRef = useRef(null);
   const toast = useToast();
 
@@ -217,31 +218,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    ensureSeeded();
-    removeLegacyKeys();
-    const id = setTimeout(() => {
-      setTexts(load(TEXTS_KEY, []));
-      setWords(load(WORDS_KEY, []));
-      setHighlights(load(HIGHLIGHTS_KEY, {}));
-      setNotes(load(NOTES_KEY, {}));
-      setBooting(false);
-    }, 720);
-    return () => clearTimeout(id);
-  }, []);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const max = el.scrollHeight - el.clientHeight;
-      setProgress(max > 0 ? Math.min(1, Math.max(0, el.scrollTop / max)) : 1);
-    };
-    onScroll();
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [view, currentId, readLoading]);
-
-  useEffect(() => {
     const baseTitle = view === 'read'
       ? (texts.find((tx) => tx.id === currentId)?.title || 'Yel Reader')
       : 'Yel Reader';
@@ -278,10 +254,7 @@ export default function App() {
   const openText = useCallback((id) => {
     setCurrentId(id);
     setView('read');
-    setReadLoading(true);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    setProgress(0);
-    setTimeout(() => setReadLoading(false), 480);
   }, []);
 
   const startEdit = useCallback((id) => {
@@ -359,6 +332,15 @@ export default function App() {
     toast({ message: t('toast.word_removed', word), icon: 'trash', tone: 'danger' });
   };
 
+  // Words the reader marked "I know this" (no hint, no need to save)
+  const knownSet = useMemo(() => new Set(Object.keys(known)), [known]);
+  const markKnown = useCallback((word) => {
+    setKnown((prev) => { const next = { ...prev, [word]: Date.now() }; save(KNOWN_KEY, next); return next; });
+  }, []);
+  const unmarkKnown = useCallback((word) => {
+    setKnown((prev) => { const next = { ...prev }; delete next[word]; save(KNOWN_KEY, next); return next; });
+  }, []);
+
   // Highlights
   const addHighlight = useCallback((textId, word, color) => {
     setHighlights((prev) => {
@@ -397,11 +379,11 @@ export default function App() {
     showSynonyms: settings.popupShowSynonyms !== false,
     showAntonyms: settings.popupShowAntonyms !== false,
   };
-  const currentHighlights = currentId ? (highlights[currentId] || {}) : {};
+  const currentHighlights = currentId ? (highlights[currentId] || NO_HIGHLIGHTS) : NO_HIGHLIGHTS;
 
   let page;
   if (view === 'library') {
-    page = <Home texts={texts} loading={booting} onOpen={openText} onDelete={deleteText} onEdit={startEdit} onNew={() => goTo('new')} t={t} notes={notes} />;
+    page = <Home texts={texts} onOpen={openText} onDelete={deleteText} onEdit={startEdit} onNew={() => goTo('new')} t={t} notes={notes} />;
   } else if (view === 'new' || view === 'edit') {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
@@ -426,8 +408,11 @@ export default function App() {
   } else if (view === 'read') {
     page = current
       ? <ReadText
+          key={current.id}
           text={current} savedWords={words} onSaveWord={saveWord}
-          onBack={() => goTo('library')} loading={readLoading} progress={progress}
+          onBack={() => goTo('library')} scrollRef={scrollRef}
+          knownSet={knownSet} onMarkKnown={markKnown} onUnmarkKnown={unmarkKnown}
+          hintLevel={settings.hintLevel}
           t={t} definitionOptions={definitionOptions}
           highlights={currentHighlights}
           onHighlight={handleHighlight}
@@ -469,11 +454,7 @@ export default function App() {
         )}
 
         <main ref={scrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
-          {view === 'read' && !readLoading && (
-            <div style={{ position: 'sticky', top: 0, zIndex: 30, height: 3 }}>
-              <div style={{ height: '100%', width: Math.round(progress * 100) + '%', background: 'var(--accent)', transition: 'width .1s linear', borderRadius: '0 2px 2px 0' }} />
-            </div>
-          )}
+          {view === 'read' && current && <ReadProgressBar key={current.id} scrollRef={scrollRef} />}
           <div style={{ padding: contentPad, minHeight: '100%' }}>
             {page}
           </div>
