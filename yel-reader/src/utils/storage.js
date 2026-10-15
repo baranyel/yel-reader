@@ -2,7 +2,6 @@ export const TEXTS_KEY = 'yelreader.texts.v1';
 export const WORDS_KEY = 'yelreader.words.v1';
 export const TWEAKS_KEY = 'yelreader.tweaks.v1';
 export const SETTINGS_KEY = 'yelreader.settings.v1';
-export const READS_KEY = 'yelreader.reads.v1';
 export const HIGHLIGHTS_KEY = 'yelreader.highlights.v1';
 export const PROGRESS_KEY = 'yelreader.progress.v1';
 export const NOTES_KEY = 'yelreader.notes.v1';
@@ -10,7 +9,7 @@ const SEEDED_KEY = 'yelreader.seeded.v1';
 
 export const ALL_STORAGE_KEYS = [
   TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY,
-  READS_KEY, HIGHLIGHTS_KEY, PROGRESS_KEY, NOTES_KEY,
+  HIGHLIGHTS_KEY, PROGRESS_KEY, NOTES_KEY,
 ];
 
 export function saveNote(note) {
@@ -139,37 +138,6 @@ export function getProgress(textId) {
   return all[textId] || null;
 }
 
-export function logRead(textId) {
-  const reads = load(READS_KEY, {});
-  reads[textId] = Date.now();
-  save(READS_KEY, reads);
-}
-
-export function calcStats(texts, words, reads) {
-  const now = Date.now();
-  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
-  const wordsThisWeek = words.filter((w) => w.savedAt > weekAgo).length;
-  const textsRead = Object.keys(reads || {}).length;
-
-  // Streak: consecutive days with at least one saved word
-  const wordDays = new Set(
-    words.map((w) => {
-      const d = new Date(w.savedAt);
-      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    })
-  );
-  let streak = 0;
-  const cursor = new Date();
-  for (let i = 0; i < 365; i++) {
-    const key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
-    if (!wordDays.has(key)) break;
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  return { textsTotal: texts.length, textsRead, wordsTotal: words.length, wordsThisWeek, streak };
-}
-
 // SM-2 algorithm: quality 0-5 (0=forgot, 3=hard, 5=easy)
 export function sm2Update(wordObj, quality) {
   const q = Math.max(0, Math.min(5, quality));
@@ -197,6 +165,13 @@ export function sm2Update(wordObj, quality) {
     sm2_efactor: parseFloat(newEf.toFixed(2)),
     sm2_nextReview: Date.now() + newInterval * 24 * 60 * 60 * 1000,
   };
+}
+
+// Keys written by features that no longer exist (streaks, "texts read" stats).
+const LEGACY_KEYS = ['yelreader.reads.v1', 'yelreader_streak'];
+
+export function removeLegacyKeys() {
+  try { LEGACY_KEYS.forEach((k) => localStorage.removeItem(k)); } catch {}
 }
 
 export function ensureSeeded() {

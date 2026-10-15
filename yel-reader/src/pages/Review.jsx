@@ -1,54 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Icon, Button } from '../components/ui.jsx';
 import { sm2Update } from '../utils/storage.js';
+import { CEFR_COLORS } from '../utils/cefrWords.js';
 
 // ---- Constants ---------------------------------------------------------------
-const STREAK_KEY = 'yelreader_streak';
-
 const LANG_FLAGS = {
   en: '🇬🇧', tr: '🇹🇷', fr: '🇫🇷', de: '🇩🇪',
   es: '🇪🇸', it: '🇮🇹', pt: '🇵🇹', ru: '🇷🇺',
   ja: '🇯🇵', ko: '🇰🇷', zh: '🇨🇳',
 };
-
-const CEFR_COLORS = {
-  A1: '#16a34a', A2: '#0d9488', B1: '#2563eb',
-  B2: '#7c3aed', C1: '#ea580c', C2: '#dc2626',
-};
-
-// ---- Streak helpers ----------------------------------------------------------
-function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function loadStreakData() {
-  try {
-    const raw = localStorage.getItem(STREAK_KEY);
-    if (!raw) return { streak: 0, studyMap: {} };
-    return JSON.parse(raw);
-  } catch {
-    return { streak: 0, studyMap: {} };
-  }
-}
-
-function calcStreakFromMap(studyMap) {
-  let streak = 0;
-  const cursor = new Date();
-  for (let i = 0; i < 365; i++) {
-    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
-    if (!studyMap[key]) break;
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
-}
-
-function saveStreakData(studyMap) {
-  const streak = calcStreakFromMap(studyMap);
-  localStorage.setItem(STREAK_KEY, JSON.stringify({ streak, studyMap }));
-  return streak;
-}
 
 // ---- Queue builder -----------------------------------------------------------
 function buildQueue(words) {
@@ -93,77 +53,6 @@ function HighlightedSentence({ sentence, word }) {
         )
       )}
     </>
-  );
-}
-
-// ---- 30-day heatmap ---------------------------------------------------------
-function HeatMap({ studyMap }) {
-  const days = [];
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    days.push({ key, count: studyMap[key] || 0 });
-  }
-  const maxCount = Math.max(1, ...days.map((d) => d.count));
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(30, 1fr)', gap: 3 }}>
-      {days.map(({ key, count }) => {
-        const intensity = count === 0 ? 0 : 0.25 + Math.min(1, count / maxCount) * 0.75;
-        const bg = count === 0 ? 'var(--bg-sunk)' : `rgba(15,118,110,${intensity})`;
-        return (
-          <div
-            key={key}
-            title={`${key}: ${count}`}
-            style={{
-              aspectRatio: '1',
-              borderRadius: 2,
-              background: bg,
-              border: '1px solid var(--border)',
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-// ---- Confetti ----------------------------------------------------------------
-function Confetti() {
-  const pieces = useMemo(() => {
-    const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6'];
-    return Array.from({ length: 50 }, (_, i) => ({
-      id: i,
-      color: colors[i % colors.length],
-      left: `${(i * 2.04) % 100}%`,
-      delay: `${(i * 0.055) % 2.4}s`,
-      duration: `${1.8 + (i * 0.09) % 1.6}s`,
-      size: 6 + (i % 5) * 2,
-      isCircle: i % 3 !== 0,
-      reverse: i % 2 === 1,
-    }));
-  }, []);
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 9999 }}>
-      {pieces.map((p) => (
-        <div
-          key={p.id}
-          style={{
-            position: 'absolute',
-            top: -24,
-            left: p.left,
-            width: p.size,
-            height: p.size,
-            background: p.color,
-            borderRadius: p.isCircle ? '50%' : 2,
-            animation: `${p.reverse ? 'confettiFallR' : 'confettiFall'} ${p.duration} ${p.delay} ease-in forwards`,
-          }}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -213,9 +102,6 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
   const [flipped, setFlipped] = useState(false);
   const [results, setResults] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
   const [sessionStart, setSessionStart] = useState(null);
-  const [streakData, setStreakData] = useState(() => loadStreakData());
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [newStreak, setNewStreak] = useState(null);
 
   const flippedRef = useRef(flipped);
   useEffect(() => { flippedRef.current = flipped; });
@@ -224,16 +110,8 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
   const current = queue[idx];
   const total = queue.length;
 
-  function finishSession(finalResults) {
-    const today = todayKey();
-    const count = finalResults.again + finalResults.hard + finalResults.good + finalResults.easy;
-    const newMap = { ...streakData.studyMap, [today]: (streakData.studyMap[today] || 0) + count };
-    const updatedStreak = saveStreakData(newMap);
-    setStreakData({ streak: updatedStreak, studyMap: newMap });
-    setNewStreak(updatedStreak);
+  function finishSession() {
     setPhase('done');
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 4500);
   }
 
   function handleGrade(quality) {
@@ -247,7 +125,7 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
     };
     setResults(newResults);
     if (idx + 1 >= total) {
-      finishSession(newResults);
+      finishSession();
     } else {
       setIdx((i) => i + 1);
       setFlipped(false);
@@ -276,8 +154,6 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
     setFlipped(false);
     setResults({ again: 0, hard: 0, good: 0, easy: 0 });
     setSessionStart(null);
-    setShowConfetti(false);
-    setNewStreak(null);
     setPhase('start');
   }
 
@@ -301,17 +177,6 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
         <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>{t('review.none_title')}</h2>
         <p style={{ margin: '10px 0 28px', fontSize: 15, color: 'var(--text-faint)', lineHeight: 1.65 }}>{t('review.none_body')}</p>
 
-        <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: 28, textAlign: 'left', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <span style={{ fontSize: 24, display: 'inline-block', animation: 'flamePulse 2s ease-in-out infinite' }}>🔥</span>
-            <div>
-              <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{streakData.streak}</span>
-              <span style={{ fontSize: 12.5, color: 'var(--text-faint)', marginLeft: 7 }}>{t('review.streak_label')}</span>
-            </div>
-          </div>
-          <HeatMap studyMap={streakData.studyMap} />
-        </div>
-
         <Button variant="primary" icon="arrowLeft" onClick={onBack}>{t('review.back')}</Button>
       </div>
     );
@@ -332,21 +197,6 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
           </h1>
           <p style={{ margin: '0 0 2px', fontSize: 44, fontWeight: 800, color: 'var(--accent)', lineHeight: 1 }}>{total}</p>
           <p style={{ margin: 0, fontSize: 14, color: 'var(--text-faint)' }}>{t('review.start_due', total)}</p>
-        </div>
-
-        {/* Streak + heatmap */}
-        <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px 22px', marginBottom: 14, boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 18 }}>
-            <span style={{ fontSize: 28, display: 'inline-block', animation: streakData.streak > 0 ? 'flamePulse 2s ease-in-out infinite' : 'none' }}>🔥</span>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)', lineHeight: 1 }}>{streakData.streak}</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{t('review.streak_label')}</div>
-            </div>
-          </div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>
-            Last 30 days
-          </div>
-          <HeatMap studyMap={streakData.studyMap} />
         </div>
 
         {/* Upcoming schedule */}
@@ -400,9 +250,9 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
 
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center', padding: '60px 24px', animation: 'fadeUp .4s ease' }}>
-        {showConfetti && <Confetti />}
-
-        <div style={{ fontSize: 56, marginBottom: 14, animation: 'popIn .5s cubic-bezier(.2,.9,.3,1) both' }}>🎉</div>
+        <div style={{ width: 88, height: 88, borderRadius: 24, background: 'var(--accent-soft)', display: 'grid', placeItems: 'center', margin: '0 auto 22px', color: 'var(--accent)', animation: 'popIn .5s cubic-bezier(.2,.9,.3,1) both' }}>
+          <Icon name="check" size={42} stroke={1.5} />
+        </div>
         <h2 style={{ margin: '0 0 8px', fontSize: 26, fontWeight: 700, color: 'var(--text)' }}>{t('review.done_title')}</h2>
         <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--text-soft)' }}>{t('review.done_body', reviewed)}</p>
 
@@ -420,7 +270,7 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
         </div>
 
         {/* Breakdown */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 28, flexWrap: 'wrap' }}>
           {[
             { label: t('review.easy'), count: results.easy, color: '#3b82f6' },
             { label: t('review.good'), count: results.good, color: '#22c55e' },
@@ -435,21 +285,6 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
               </div>
             ))}
         </div>
-
-        {/* Streak badge */}
-        {newStreak != null && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '10px 20px', borderRadius: 99,
-            background: 'var(--accent-soft)', marginBottom: 28,
-            animation: 'streakCountIn .5s .45s cubic-bezier(.2,.9,.3,1) both',
-          }}>
-            <span style={{ fontSize: 20 }}>🔥</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>
-              {t('review.done_streak', newStreak)}
-            </span>
-          </div>
-        )}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Button variant="ghost" icon="arrowLeft" onClick={onBack}>{t('review.back')}</Button>

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Icon, PageHeader } from '../components/ui.jsx';
 import { UI_LANGUAGES, NATIVE_LANGUAGES, TEXT_LANGUAGES } from '../utils/i18n.js';
-import { calcStats, ALL_STORAGE_KEYS, load, save } from '../utils/storage.js';
+import { ALL_STORAGE_KEYS, save } from '../utils/storage.js';
 import { getAllImages, restoreImages } from '../utils/imageStore.js';
 import { CEFR_COLORS } from '../utils/cefrWords.js';
 
@@ -241,8 +241,7 @@ function WordCardSettings({ settings, setSetting, t }) {
 }
 
 // ---- Settings page ----------------------------------------------------------
-export default function Settings({ tweaks, setTweak, settings, setSetting, t, texts, words, reads }) {
-  const stats = calcStats(texts || [], words || [], reads || {});
+export default function Settings({ tweaks, setTweak, settings, setSetting, t }) {
   const importRef = useRef(null);
   const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | null
 
@@ -374,31 +373,6 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t, te
       <Section label={t('settings.s_popup')} />
       <WordCardSettings settings={settings} setSetting={setSetting} t={t} />
 
-      {/* Statistics section */}
-      <Section label={t('settings.s_stats')} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12, marginBottom: 24 }}>
-        {[
-          { label: t('settings.stat_texts_saved'), value: stats.textsTotal, icon: 'library' },
-          { label: t('settings.stat_texts_read'), value: stats.textsRead, icon: 'book' },
-          { label: t('settings.stat_words_total'), value: stats.wordsTotal, icon: 'bookmark' },
-          { label: t('settings.stat_words_week'), value: stats.wordsThisWeek, icon: 'sparkle' },
-        ].map((s) => (
-          <div key={s.label} style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 18px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8, color: 'var(--accent)' }}>
-              <Icon name={s.icon} size={16} />
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text)', letterSpacing: '-.02em', lineHeight: 1 }}>{s.value}</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 5, fontWeight: 500 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-      {stats.streak > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb,var(--accent) 30%,transparent)', borderRadius: 'var(--radius)', fontSize: 14.5, fontWeight: 600, color: 'var(--accent)' }}>
-          <Icon name="zap" size={20} />
-          {stats.streak} {t('settings.stat_streak')}
-        </div>
-      )}
-
       {/* Data section */}
       <Section label={t('settings.s_data')} />
       <SettingCard>
@@ -427,6 +401,12 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t, te
           {importStatus === 'ok' ? t('settings.import_ok') : t('settings.import_err')}
         </div>
       )}
+
+      {/* Privacy note */}
+      <Section label={t('settings.privacy_title')} />
+      <p style={{ margin: '0 0 24px', fontSize: 13, lineHeight: 1.65, color: 'var(--text-faint)' }}>
+        {t('settings.privacy_note')}
+      </p>
     </div>
   );
 }

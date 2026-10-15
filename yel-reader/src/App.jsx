@@ -9,10 +9,9 @@ import Quiz from './pages/Quiz.jsx';
 import Review from './pages/Review.jsx';
 import Settings from './pages/Settings.jsx';
 import Notes from './pages/Notes.jsx';
-import Progress from './pages/Progress.jsx';
 import {
-  load, save, ensureSeeded, uid, logRead,
-  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, READS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, SETTINGS_DEFAULTS,
+  load, save, ensureSeeded, removeLegacyKeys, uid,
+  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, SETTINGS_DEFAULTS,
 } from './utils/storage.js';
 import { getCefrLevel } from './utils/cefrWords.js';
 import { getT } from './utils/i18n.js';
@@ -160,12 +159,10 @@ export default function App() {
   const [tweaks, setTweaksState] = useState(() => ({ ...TWEAK_DEFAULTS, ...load(TWEAKS_KEY, {}) }));
   const [settings, setSettingsState] = useState(() => ({ ...SETTINGS_DEFAULTS, ...load(SETTINGS_KEY, {}) }));
   const [view, setView] = useState('library');
-  const [wordsCefrFilter, setWordsCefrFilter] = useState(null);
   const [currentId, setCurrentId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [texts, setTexts] = useState([]);
   const [words, setWords] = useState([]);
-  const [reads, setReads] = useState({});
   const [highlights, setHighlights] = useState({});
   const [notes, setNotes] = useState({});
   const [booting, setBooting] = useState(true);
@@ -198,7 +195,6 @@ export default function App() {
     { id: 'new', label: t('nav.new'), icon: 'plus' },
     { id: 'words', label: t('nav.words'), icon: 'words' },
     { id: 'notes', label: t('nav.notes'), icon: 'note', badge: noteCount || null },
-    { id: 'progress', label: t('nav.progress'), icon: 'chart' },
     { id: 'review', label: t('nav.review'), icon: 'repeat', badge: dueCount || null },
     { id: 'settings', label: t('nav.settings'), icon: 'settings' },
   ];
@@ -222,10 +218,10 @@ export default function App() {
 
   useEffect(() => {
     ensureSeeded();
+    removeLegacyKeys();
     const id = setTimeout(() => {
       setTexts(load(TEXTS_KEY, []));
       setWords(load(WORDS_KEY, []));
-      setReads(load(READS_KEY, {}));
       setHighlights(load(HIGHLIGHTS_KEY, {}));
       setNotes(load(NOTES_KEY, {}));
       setBooting(false);
@@ -272,7 +268,7 @@ export default function App() {
   const persistWords = (next) => { setWords(next); save(WORDS_KEY, next); };
 
   const goTo = (v) => {
-    if (['library', 'words', 'new', 'settings', 'quiz', 'review', 'notes', 'progress'].includes(v)) {
+    if (['library', 'words', 'new', 'settings', 'quiz', 'review', 'notes'].includes(v)) {
       if (v === 'new') setEditingId(null);
       setView(v);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -286,7 +282,6 @@ export default function App() {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     setProgress(0);
     setTimeout(() => setReadLoading(false), 480);
-    setReads((prev) => { const next = { ...prev, [id]: Date.now() }; logRead(id); return next; });
   }, []);
 
   const startEdit = useCallback((id) => {
@@ -407,17 +402,13 @@ export default function App() {
   } else if (view === 'new' || view === 'edit') {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
-    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} initialCefrFilter={wordsCefrFilter} onCefrFilterClear={() => setWordsCefrFilter(null)} t={t} />;
-  } else if (view === 'progress') {
-    page = <Progress words={words} texts={texts} reads={reads} t={t}
-      onWordsUpdated={(updated) => persistWords(updated)}
-      onNavigateToWords={(level) => { setWordsCefrFilter(level); goTo('words'); }} />;
+    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
   } else if (view === 'quiz') {
     page = <Quiz words={words} onBack={() => goTo('words')} t={t} />;
   } else if (view === 'review') {
     page = <Review words={words} onBack={() => goTo('words')} onUpdateWord={(word, fields) => updateWordFields(word, fields)} t={t} />;
   } else if (view === 'settings') {
-    page = <Settings tweaks={tweaks} setTweak={setTweak} settings={settings} setSetting={setSetting} t={t} texts={texts} words={words} reads={reads} />;
+    page = <Settings tweaks={tweaks} setTweak={setTweak} settings={settings} setSetting={setSetting} t={t} />;
   } else if (view === 'notes') {
     page = <Notes notes={notes} t={t}
       onOpenText={(textId) => openText(textId)}

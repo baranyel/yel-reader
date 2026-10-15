@@ -120,11 +120,11 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote }) {
   );
 }
 
-export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, initialCefrFilter, onCefrFilterClear, t }) {
+export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, t }) {
   const [query, setQuery] = useState('');
   const [focus, setFocus] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [cefrFilter, setCefrFilter] = useState(initialCefrFilter || null);
+  const [cefrFilter, setCefrFilter] = useState(null);
 
   const enriched = useMemo(() => words.map((w) => ({ ...w, cefr: w.cefr || getCefrLevelSync(w.word) })), [words]);
 
@@ -205,7 +205,7 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
             {CEFR_LEVELS.filter((l) => cefrCounts[l] > 0).map((level) => {
               const active = cefrFilter === level;
               return (
-                <button key={level} onClick={() => { setCefrFilter(active ? null : level); if (active) onCefrFilterClear?.(); }}
+                <button key={level} onClick={() => { setCefrFilter(active ? null : level); }}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700, padding: '4px 11px', borderRadius: 99, border: `1.5px solid ${active ? CEFR_COLORS[level] : `${CEFR_COLORS[level]}44`}`, background: active ? `color-mix(in srgb, ${CEFR_COLORS[level]} 14%, var(--bg-elev))` : 'transparent', color: active ? CEFR_COLORS[level] : 'var(--text-faint)', cursor: 'pointer', transition: 'all .14s' }}>
                   {level}
                   <span style={{ fontSize: 11, fontWeight: 600, opacity: .75 }}>{cefrCounts[level]}</span>
@@ -213,7 +213,7 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
               );
             })}
             {cefrFilter && (
-              <button onClick={() => { setCefrFilter(null); onCefrFilterClear?.(); }}
+              <button onClick={() => { setCefrFilter(null); }}
                 style={{ fontSize: 12, color: 'var(--text-faint)', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 99, padding: '4px 10px', cursor: 'pointer' }}>
                 <Icon name="x" size={11} /> Temizle
               </button>
