@@ -39,6 +39,16 @@ export async function deleteImage(id) {
   });
 }
 
+// Delete several images; one failure must not stop the rest.
+export async function deleteImages(ids) {
+  await Promise.all([...new Set(ids)].filter(Boolean).map((id) => deleteImage(id).catch(() => {})));
+}
+
+// Ids of the images a note refers to.
+export function noteImageIds(note) {
+  return (note?.blocks || []).filter((b) => b.type === 'image' && b.imageId).map((b) => b.imageId);
+}
+
 export async function getAllImages() {
   const db = await openDB();
   return new Promise((res, rej) => {

@@ -2,28 +2,20 @@ import { useState, useMemo } from 'react';
 import { Icon, Button, IconButton, DeleteButton, PageHeader, EmptyState } from '../components/ui.jsx';
 import { relativeTime } from '../utils/storage.js';
 import { CEFR_LEVELS, CEFR_COLORS, getCefrLevelSync } from '../utils/cefrWords.js';
+import { buildCsv, buildAnki } from '../utils/exportWords.js';
 
 function downloadFile(content, filename, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportCSV(words) {
-  const esc = (v) => `"${(v || '').replace(/"/g, '""')}"`;
-  const header = 'Word,Definition,Example,Note,Source\n';
-  const rows = words.map((w) => [w.word, w.definition || '', w.example || '', w.note || '', w.sourceTitle].map(esc).join(',')).join('\n');
-  downloadFile(header + rows, 'yelreader-words.csv', 'text/csv;charset=utf-8');
-}
+const exportCSV = (words) => downloadFile(buildCsv(words), 'yelreader-words.csv', 'text/csv;charset=utf-8');
+const exportAnki = (words) => downloadFile(buildAnki(words), 'yelreader-anki.txt', 'text/plain;charset=utf-8');
 
-function exportAnki(words) {
-  const rows = words.map((w) => `${w.word}\t${[w.definition, w.example, w.note].filter(Boolean).join(' | ')}`).join('\n');
-  downloadFile(rows, 'yelreader-anki.txt', 'text/plain;charset=utf-8');
-}
-
-function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote }) {
+function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote, sourceExists, t }) {
   const [hover, setHover] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [noteText, setNoteText] = useState(entry.note || '');
@@ -107,8 +99,9 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote }) {
 
         {/* Meta + actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => onOpenSource(entry.sourceId)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, color: 'var(--text-faint)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 99, padding: '4px 10px', maxWidth: 150, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          <button onClick={() => sourceExists && onOpenSource(entry.sourceId)} disabled={!sourceExists}
+            title={sourceExists ? undefined : t('myWords.source_deleted')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, color: 'var(--text-faint)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 99, padding: '4px 10px', maxWidth: 150, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', opacity: sourceExists ? 1 : 0.55, cursor: sourceExists ? 'pointer' : 'default', textDecoration: sourceExists ? 'none' : 'line-through' }}>
             <Icon name="doc" size={12} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.sourceTitle}</span>
           </button>
@@ -120,7 +113,7 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote }) {
   );
 }
 
-export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, t }) {
+export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, sourceExists, t }) {
   const [query, setQuery] = useState('');
   const [focus, setFocus] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -244,7 +237,7 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
           {filtered.map((w, i) => (
             <WordRow key={w.word + w.sourceId} entry={w} index={i}
               onDelete={onDelete} onOpenSource={onOpenSource}
-              onUpdateNote={onUpdateNote} />
+              onUpdateNote={onUpdateNote} sourceExists={sourceExists ? sourceExists(w.sourceId) : true} t={t} />
           ))}
         </div>
       )}

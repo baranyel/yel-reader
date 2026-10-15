@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
 import { Icon, PageHeader } from '../components/ui.jsx';
 import { UI_LANGUAGES, NATIVE_LANGUAGES, TEXT_LANGUAGES } from '../utils/i18n.js';
-import { ALL_STORAGE_KEYS, save } from '../utils/storage.js';
-import { getAllImages, restoreImages } from '../utils/imageStore.js';
+import { downloadBackup, restoreBackup } from '../utils/backup.js';
+import { validateBackup } from '../utils/backupCore.js';
 import { CEFR_COLORS } from '../utils/cefrWords.js';
 
 // ---- Shared primitives ------------------------------------------------------
@@ -243,22 +243,15 @@ function WordCardSettings({ settings, setSetting, t }) {
 // ---- Settings page ----------------------------------------------------------
 export default function Settings({ tweaks, setTweak, settings, setSetting, t }) {
   const importRef = useRef(null);
-  const [importStatus, setImportStatus] = useState(null); // 'ok' | 'err' | null
+  const [importStatus, setImportStatus] = useState(null); // { ok, text } | null
 
   const handleExport = async () => {
-    const storage = {};
-    for (const key of ALL_STORAGE_KEYS) {
-      const raw = localStorage.getItem(key);
-      if (raw) storage[key] = JSON.parse(raw);
+    try {
+      await downloadBackup();
+    } catch {
+      setImportStatus({ ok: false, text: t('error.export_failed') });
+      setTimeout(() => setImportStatus(null), 4000);
     }
-    const images = await getAllImages();
-    const blob = new Blob([JSON.stringify({ version: 1, exportedAt: Date.now(), storage, images }, null, 0)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `yelreader-export-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleImport = async (e) => {
@@ -266,20 +259,28 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t }) 
     e.target.value = '';
     if (!file) return;
     if (!window.confirm(t('settings.import_confirm'))) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data.version || !data.storage) throw new Error('invalid');
-      for (const [key, value] of Object.entries(data.storage)) {
-        save(key, value);
-      }
-      if (data.images) await restoreImages(data.images);
-      setImportStatus('ok');
-      setTimeout(() => window.location.reload(), 1200);
-    } catch {
-      setImportStatus('err');
-      setTimeout(() => setImportStatus(null), 4000);
+
+    const fail = (key) => {
+      setImportStatus({ ok: false, text: t(key) });
+      setTimeout(() => setImportStatus(null), 5000);
+    };
+
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { return fail('settings.import_err'); }
+
+    // Nothing is written until the whole file has been checked.
+    const valid = validateBackup(data);
+    if (!valid.ok) {
+      return fail(valid.error === 'version' ? 'settings.import_err_version'
+        : valid.error === 'nothing_usable' ? 'settings.import_err_empty' : 'settings.import_err');
     }
+    try {
+      await restoreBackup(valid);
+    } catch {
+      return fail('settings.import_err_write');
+    }
+    setImportStatus({ ok: true, text: t('settings.import_summary', valid.counts.texts, valid.counts.words, valid.skipped) });
+    setTimeout(() => window.location.reload(), 1800);
   };
   const ACCENTS = ['#0F766E', '#4F46E5', '#15803D', '#BE123C', '#B45309', '#0369A1'];
   const FONTS = ['Lora', 'Newsreader', 'Playfair'];
@@ -414,8 +415,8 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t }) 
 
       {/* Import status */}
       {importStatus && (
-        <div style={{ padding: '11px 16px', borderRadius: 'var(--radius-sm)', fontSize: 13.5, fontWeight: 500, marginBottom: 16, animation: 'fadeUp .25s ease', background: importStatus === 'ok' ? 'var(--accent-soft)' : 'color-mix(in srgb,#c0392b 10%,transparent)', color: importStatus === 'ok' ? 'var(--accent)' : '#c0392b', border: `1px solid ${importStatus === 'ok' ? 'color-mix(in srgb,var(--accent) 30%,transparent)' : 'color-mix(in srgb,#c0392b 30%,transparent)'}` }}>
-          {importStatus === 'ok' ? t('settings.import_ok') : t('settings.import_err')}
+        <div role="status" style={{ padding: '11px 16px', borderRadius: 'var(--radius-sm)', fontSize: 13.5, fontWeight: 500, marginBottom: 16, animation: 'fadeUp .25s ease', background: importStatus.ok ? 'var(--accent-soft)' : 'color-mix(in srgb,#c0392b 10%,transparent)', color: importStatus.ok ? 'var(--accent)' : '#c0392b', border: `1px solid ${importStatus.ok ? 'color-mix(in srgb,var(--accent) 30%,transparent)' : 'color-mix(in srgb,#c0392b 30%,transparent)'}` }}>
+          {importStatus.text}
         </div>
       )}
 

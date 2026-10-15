@@ -4,7 +4,7 @@ import WordPopup from '../components/WordPopup.jsx';
 import NoteEditor from '../components/NoteEditor.jsx';
 import PhrasePopup from '../components/PhrasePopup.jsx';
 import { ReadProgressRing } from '../components/ReadProgress.jsx';
-import { wordCount, relativeTime, readingTime, saveProgress, getProgress, saveNote, deleteNote } from '../utils/storage.js';
+import { wordCount, relativeTime, readingTime, saveProgress, getProgress } from '../utils/storage.js';
 import { cleanWord, extractSentence, tokenize } from '../utils/text.js';
 import { matchesSaved } from '../utils/lemma.js';
 import { resolveResume } from '../utils/resume.js';
@@ -269,14 +269,13 @@ export default function ReadText({
   }, [getNoteForPara]);
 
   const handleNoteSave = useCallback((note) => {
-    saveNote(note);
     onNoteSaved?.(note);
     setNoteEditor(null);
   }, [onNoteSaved]);
 
   const handleNoteDelete = useCallback(() => {
     const n = noteEditor?.note;
-    if (n) { deleteNote(n.id); onNoteDeleted?.(n.id); }
+    if (n) onNoteDeleted?.(n.id);
     setNoteEditor(null);
   }, [noteEditor, onNoteDeleted]);
 
@@ -400,7 +399,6 @@ export default function ReadText({
           onDeleteNote={() => {
             const n = getNoteForPara(ctxMenu.paraIdx);
             if (n && window.confirm(t('notes.confirm_delete'))) {
-              deleteNote(n.id);
               onNoteDeleted?.(n.id);
             }
           }}

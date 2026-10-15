@@ -47,7 +47,7 @@ function BlockRenderer({ block, imageCache }) {
 }
 
 // ---- Note card --------------------------------------------------------------
-function NoteCard({ note, onOpenText, onDelete, onEdit, t }) {
+function NoteCard({ note, onOpenText, onDelete, onEdit, textExists, t }) {
   const [expanded, setExpanded] = useState(false);
   const [imageCache, setImageCache] = useState({});
 
@@ -96,6 +96,12 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, t }) {
           <span style={{ flexShrink: 0 }}>{relativeTime(note.updatedAt)}</span>
           <Icon name={expanded ? 'chevronLeft' : 'chevronRight'} size={14} style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform .18s' }} />
         </div>
+
+        {(!textExists || note.paragraphIndex == null) && (
+          <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 600, color: '#B45309', background: 'color-mix(in srgb,#B45309 10%,transparent)', borderRadius: 6, padding: '4px 9px' }}>
+            {!textExists ? t('notes.orphan_text') : t('notes.orphan_para')}
+          </div>
+        )}
 
         {/* Paragraph quote */}
         {note.paragraphPreview && (
@@ -152,8 +158,8 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, t }) {
           <Icon name="trash" size={13} /> Sil
         </button>
         <div style={{ flex: 1 }} />
-        <button onClick={() => onOpenText(note.textId)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, color: 'var(--text-faint)', background: 'transparent', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}
+        <button onClick={() => textExists && onOpenText(note.textId)} disabled={!textExists}
+          style={{ opacity: textExists ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, color: 'var(--text-faint)', background: 'transparent', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}
           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent'; }}>
           <Icon name="library" size={13} /> {t('notes.open_text')}
@@ -168,7 +174,7 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, t }) {
 }
 
 // ---- Page -------------------------------------------------------------------
-export default function Notes({ notes, onOpenText, onDeleteNote, onNoteSaved, t }) {
+export default function Notes({ notes, textIds, onOpenText, onDeleteNote, onNoteSaved, t }) {
   const [query, setQuery] = useState('');
   const [editingNote, setEditingNote] = useState(null);
 
@@ -220,6 +226,7 @@ export default function Notes({ notes, onOpenText, onDeleteNote, onNoteSaved, t 
               onOpenText={(id) => onOpenText(id)}
               onDelete={(id) => { if (window.confirm(t('notes.confirm_delete'))) onDeleteNote(id); }}
               onEdit={(n) => setEditingNote(n)}
+              textExists={textIds ? textIds.has(note.textId) : true}
               t={t} />
           ))}
         </div>

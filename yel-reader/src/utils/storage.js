@@ -6,24 +6,16 @@ export const HIGHLIGHTS_KEY = 'yelreader.highlights.v1';
 export const PROGRESS_KEY = 'yelreader.progress.v1';
 export const NOTES_KEY = 'yelreader.notes.v1';
 export const KNOWN_KEY = 'yelreader.known.v1';
-const SEEDED_KEY = 'yelreader.seeded.v1';
+export const SEEDED_KEY = 'yelreader.seeded.v1';
 
+// Everything that lives in localStorage and belongs in a backup. Texts are stored in
+// IndexedDB (see textStore.js) and are added to backups separately under TEXTS_KEY.
 export const ALL_STORAGE_KEYS = [
-  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY,
+  WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY,
   HIGHLIGHTS_KEY, PROGRESS_KEY, NOTES_KEY, KNOWN_KEY,
 ];
 
-export function saveNote(note) {
-  const all = load(NOTES_KEY, {});
-  all[note.id] = note;
-  save(NOTES_KEY, all);
-}
-
-export function deleteNote(noteId) {
-  const all = load(NOTES_KEY, {});
-  delete all[noteId];
-  save(NOTES_KEY, all);
-}
+export const STORAGE_ERROR_EVENT = 'yelreader:storage-error';
 
 export const SETTINGS_DEFAULTS = {
   uiLanguage: 'tr',
@@ -48,10 +40,18 @@ export function load(key, fallback) {
   }
 }
 
+// Returns true when the value was stored. On failure (quota exceeded, storage blocked) it
+// tells the app via STORAGE_ERROR_EVENT so the user is warned instead of silently losing data.
 export function save(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+    return true;
+  } catch {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { key } }));
+    }
+    return false;
+  }
 }
 
 export function uid() {
@@ -85,7 +85,7 @@ export function readingTime(words) {
   return min + ' min read';
 }
 
-const SEED_TEXTS = [
+export const SEED_TEXTS = [
   {
     id: 't-academic',
     title: 'The Neuroscience of Memory Consolidation',
@@ -127,12 +127,17 @@ const SEED_TEXTS = [
   },
 ];
 
-const SEED_WORDS = [];
-
 // Reading position: page index plus how far (0..1) the reader had scrolled within that page.
 export function saveProgress(textId, page, scroll = 0) {
   const all = load(PROGRESS_KEY, {});
   all[textId] = { page, scroll, updatedAt: Date.now() };
+  save(PROGRESS_KEY, all);
+}
+
+export function removeProgress(textId) {
+  const all = load(PROGRESS_KEY, {});
+  if (!(textId in all)) return;
+  delete all[textId];
   save(PROGRESS_KEY, all);
 }
 
@@ -175,12 +180,4 @@ const LEGACY_KEYS = ['yelreader.reads.v1', 'yelreader_streak'];
 
 export function removeLegacyKeys() {
   try { LEGACY_KEYS.forEach((k) => localStorage.removeItem(k)); } catch {}
-}
-
-export function ensureSeeded() {
-  if (!localStorage.getItem(SEEDED_KEY)) {
-    save(TEXTS_KEY, SEED_TEXTS);
-    save(WORDS_KEY, SEED_WORDS);
-    localStorage.setItem(SEEDED_KEY, '1');
-  }
 }

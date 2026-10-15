@@ -11,9 +11,12 @@ import Review from './pages/Review.jsx';
 import Settings from './pages/Settings.jsx';
 import Notes from './pages/Notes.jsx';
 import {
-  load, save, uid,
-  TEXTS_KEY, WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, KNOWN_KEY, SETTINGS_DEFAULTS,
+  load, save, uid, removeProgress, STORAGE_ERROR_EVENT,
+  WORDS_KEY, TWEAKS_KEY, SETTINGS_KEY, HIGHLIGHTS_KEY, NOTES_KEY, KNOWN_KEY, SETTINGS_DEFAULTS,
 } from './utils/storage.js';
+import { loadTexts, putText, removeText } from './utils/textStore.js';
+import { reanchorNotes } from './utils/notesAnchor.js';
+import { deleteImages, noteImageIds } from './utils/imageStore.js';
 import { getCefrLevel } from './utils/cefrWords.js';
 import { getT } from './utils/i18n.js';
 
@@ -164,7 +167,8 @@ export default function App() {
   const [view, setView] = useState('library');
   const [currentId, setCurrentId] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [texts, setTexts] = useState(() => load(TEXTS_KEY, []));
+  const [texts, setTexts] = useState([]);
+  const [booting, setBooting] = useState(true);
   const [words, setWords] = useState(() => load(WORDS_KEY, []));
   const [highlights, setHighlights] = useState(() => load(HIGHLIGHTS_KEY, {}));
   const [notes, setNotes] = useState(() => load(NOTES_KEY, {}));
@@ -217,6 +221,27 @@ export default function App() {
     return () => window.removeEventListener('resize', h);
   }, []);
 
+  // Texts live in IndexedDB, so they load asynchronously (usually a few milliseconds).
+  useEffect(() => {
+    let alive = true;
+    loadTexts()
+      .then((loaded) => { if (alive) { setTexts(loaded); setBooting(false); } })
+      .catch(() => { if (alive) { setBooting(false); toast({ message: t('toast.save_failed'), icon: 'trash', tone: 'danger' }); } });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line
+
+  // save() reports failures (e.g. browser storage full) through this event.
+  useEffect(() => {
+    let last = 0;
+    const onError = () => {
+      if (Date.now() - last < 5000) return;
+      last = Date.now();
+      toast({ message: t('toast.storage_full'), icon: 'trash', tone: 'danger', duration: 6000 });
+    };
+    window.addEventListener(STORAGE_ERROR_EVENT, onError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onError);
+  }, [t, toast]);
+
   useEffect(() => {
     const baseTitle = view === 'read'
       ? (texts.find((tx) => tx.id === currentId)?.title || 'Yel Reader')
@@ -240,7 +265,6 @@ export default function App() {
     };
   }, [view, currentId, texts, t]);
 
-  const persistTexts = (next) => { setTexts(next); save(TEXTS_KEY, next); };
   const persistWords = (next) => { setWords(next); save(WORDS_KEY, next); };
 
   const goTo = (v) => {
@@ -263,27 +287,80 @@ export default function App() {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, []);
 
+  // Texts are written to IndexedDB; a failed write is reported instead of silently ignored.
+  const storeText = (text) =>
+    putText(text).catch(() => toast({ message: t('toast.save_failed'), icon: 'trash', tone: 'danger' }));
+
+  const persistNotes = (next) => { setNotes(next); save(NOTES_KEY, next); };
+
   const addText = (data) => {
     const text = { id: uid(), title: data.title, body: data.body, language: data.language || 'en', savedAt: Date.now() };
-    persistTexts([text, ...texts]);
+    setTexts((prev) => [text, ...prev]);
+    storeText(text);
     toast({ message: t('toast.text_saved'), icon: 'check' });
     openText(text.id);
   };
 
   const updateText = (data) => {
-    const next = texts.map((x) =>
-      x.id === editingId ? { ...x, title: data.title, body: data.body, language: data.language || x.language } : x
-    );
-    persistTexts(next);
+    const old = texts.find((x) => x.id === editingId);
+    if (!old) return;
+    const updated = { ...old, title: data.title, body: data.body, language: data.language || old.language };
+    setTexts((prev) => prev.map((x) => (x.id === editingId ? updated : x)));
+    storeText(updated);
+
+    // Notes follow their paragraphs when the text changes; titles shown elsewhere stay in sync.
+    let nextNotes = reanchorNotes(notes, editingId, old.body, data.body);
+    if (old.title !== data.title) {
+      nextNotes = Object.fromEntries(Object.entries(nextNotes).map(([id, n]) =>
+        [id, n.textId === editingId ? { ...n, textTitle: data.title } : n]));
+      persistWords(words.map((w) => (w.sourceId === editingId ? { ...w, sourceTitle: data.title } : w)));
+    }
+    if (nextNotes !== notes) persistNotes(nextNotes);
+
     setEditingId(null);
     toast({ message: t('toast.text_updated'), icon: 'check' });
     openText(editingId);
   };
 
+  // Deleting a text also deletes what hangs off it: its notes (and their images), highlights
+  // and reading position. Saved words are kept — they are vocabulary, not part of the text.
   const deleteText = (id) => {
-    persistTexts(texts.filter((x) => x.id !== id));
+    const removedNotes = Object.values(notes).filter((n) => n.textId === id);
+    setTexts((prev) => prev.filter((x) => x.id !== id));
+    removeText(id).catch(() => toast({ message: t('toast.save_failed'), icon: 'trash', tone: 'danger' }));
+
+    if (removedNotes.length) {
+      persistNotes(Object.fromEntries(Object.entries(notes).filter(([, n]) => n.textId !== id)));
+      deleteImages(removedNotes.flatMap(noteImageIds));
+    }
+    setHighlights((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      save(HIGHLIGHTS_KEY, next);
+      return next;
+    });
+    removeProgress(id);
+
     if ((view === 'read' || view === 'edit') && currentId === id) goTo('library');
-    toast({ message: t('toast.text_deleted'), icon: 'trash', tone: 'danger' });
+    toast({
+      message: removedNotes.length ? t('toast.text_deleted_with_notes', removedNotes.length) : t('toast.text_deleted'),
+      icon: 'trash', tone: 'danger',
+    });
+  };
+
+  const handleNoteSaved = (note) => {
+    persistNotes({ ...notes, [note.id]: note });
+    toast({ message: t('toast.note_saved'), icon: 'bookmark' });
+  };
+
+  const handleNoteDeleted = (id) => {
+    const note = notes[id];
+    const next = { ...notes };
+    delete next[id];
+    persistNotes(next);
+    if (note) deleteImages(noteImageIds(note));
+    toast({ message: t('toast.note_deleted'), icon: 'trash', tone: 'danger' });
   };
 
   // Update any field(s) on a word by its key
@@ -382,12 +459,14 @@ export default function App() {
   const currentHighlights = currentId ? (highlights[currentId] || NO_HIGHLIGHTS) : NO_HIGHLIGHTS;
 
   let page;
-  if (view === 'library') {
+  if (booting) {
+    page = null;
+  } else if (view === 'library') {
     page = <Home texts={texts} onOpen={openText} onDelete={deleteText} onEdit={startEdit} onNew={() => goTo('new')} t={t} notes={notes} />;
   } else if (view === 'new' || view === 'edit') {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
-    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
+    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} sourceExists={(id) => texts.some((x) => x.id === id)} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
   } else if (view === 'quiz') {
     page = <Quiz words={words} onBack={() => goTo('words')} t={t} />;
   } else if (view === 'review') {
@@ -396,15 +475,10 @@ export default function App() {
     page = <Settings tweaks={tweaks} setTweak={setTweak} settings={settings} setSetting={setSetting} t={t} />;
   } else if (view === 'notes') {
     page = <Notes notes={notes} t={t}
+      textIds={new Set(texts.map((x) => x.id))}
       onOpenText={(textId) => openText(textId)}
-      onDeleteNote={(id) => {
-        setNotes((prev) => { const next = { ...prev }; delete next[id]; save(NOTES_KEY, next); return next; });
-        toast({ message: t('toast.note_deleted'), icon: 'trash', tone: 'danger' });
-      }}
-      onNoteSaved={(note) => {
-        setNotes((prev) => { const next = { ...prev, [note.id]: note }; save(NOTES_KEY, next); return next; });
-        toast({ message: t('toast.note_saved'), icon: 'bookmark' });
-      }} />;
+      onDeleteNote={handleNoteDeleted}
+      onNoteSaved={handleNoteSaved} />;
   } else if (view === 'read') {
     page = current
       ? <ReadText
@@ -419,14 +493,8 @@ export default function App() {
           onUpdateNote={(word, note) => updateWordFields(word, { note })}
           onPageChange={() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }}
           notes={notes}
-          onNoteSaved={(note) => {
-            setNotes((prev) => { const next = { ...prev, [note.id]: note }; save(NOTES_KEY, next); return next; });
-            toast({ message: t('toast.note_saved'), icon: 'bookmark' });
-          }}
-          onNoteDeleted={(id) => {
-            setNotes((prev) => { const next = { ...prev }; delete next[id]; save(NOTES_KEY, next); return next; });
-            toast({ message: t('toast.note_deleted'), icon: 'trash', tone: 'danger' });
-          }}
+          onNoteSaved={handleNoteSaved}
+          onNoteDeleted={handleNoteDeleted}
         />
       : <EmptyState icon="doc" title="Text not found" body="This text may have been deleted."
           action={<Button variant="primary" icon="library" onClick={() => goTo('library')}>{t('nav.library')}</Button>} />;

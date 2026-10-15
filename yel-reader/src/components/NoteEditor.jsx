@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon, Button } from './ui.jsx';
-import { saveImage, getImage, deleteImage } from '../utils/imageStore.js';
+import { saveImage, getImage, deleteImages, noteImageIds } from '../utils/imageStore.js';
 import { uid } from '../utils/storage.js';
 
 // ---- Constants --------------------------------------------------------------
@@ -22,6 +22,35 @@ export const NOTE_IMPORTANCE = [
 
 export function getNoteColor(colorId) {
   return NOTE_COLORS.find((c) => c.id === colorId) || null;
+}
+
+// Photos are shrunk before they are stored: a phone photo can be 5–10 MB as a data URL.
+// GIF/SVG are kept as they are (resizing would flatten the animation or rasterise the vector).
+const MAX_IMAGE_SIDE = 1600;
+function readImage(file) {
+  const readRaw = () => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  if (/gif|svg/i.test(file.type)) return readRaw();
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.width, img.height));
+      if (scale === 1 && file.size < 400 * 1024) { readRaw().then(resolve, () => resolve(null)); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); readRaw().then(resolve, () => resolve(null)); };
+    img.src = url;
+  });
 }
 
 // ---- Block components -------------------------------------------------------
@@ -99,7 +128,12 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
   const [pendingInsert, setPendingInsert] = useState(null);
   const [color, setColor] = useState(note?.color || null);
   const [importance, setImportance] = useState(note?.importance ?? null);
+  const [saveError, setSaveError] = useState(false);
   const fileInputRef = useRef(null);
+  // Nothing touches the image store until the note is saved: images added in this session wait
+  // here, and images removed from an existing note are only deleted after a successful save.
+  const pendingImages = useRef({});
+  const originalImageIds = useRef(noteImageIds(note));
 
   useEffect(() => {
     const load = async () => {
@@ -120,8 +154,7 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
     setBlocks((prev) => prev.map((b) => b.id === id ? { ...b, caption } : b));
   }, []);
 
-  const handleDeleteBlock = useCallback(async (id, imageId) => {
-    if (imageId) await deleteImage(imageId).catch(() => {});
+  const handleDeleteBlock = useCallback((id) => {
     setBlocks((prev) => {
       const next = prev.filter((b) => b.id !== id);
       return next.length ? next : [{ id: uid(), type: 'text', content: '' }];
@@ -146,23 +179,29 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target.result;
-      const imageId = 'img-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-      await saveImage(imageId, dataUrl);
-      setImageUrls((prev) => ({ ...prev, [imageId]: dataUrl }));
-      const imgBlock = { id: uid(), type: 'image', imageId, caption: '' };
-      const textBlock = { id: uid(), type: 'text', content: '' };
-      insertBlock(pendingInsert, imgBlock, textBlock);
-      setPendingInsert(null);
-    };
-    reader.readAsDataURL(file);
+    const dataUrl = await readImage(file);
+    if (!dataUrl) return;
+    const imageId = 'img-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    pendingImages.current[imageId] = dataUrl;
+    setImageUrls((prev) => ({ ...prev, [imageId]: dataUrl }));
+    insertBlock(pendingInsert, { id: uid(), type: 'image', imageId, caption: '' }, { id: uid(), type: 'text', content: '' });
+    setPendingInsert(null);
   }, [pendingInsert, insertBlock]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const cleanBlocks = blocks.filter((b) => b.type === 'image' || b.content.trim());
     if (!cleanBlocks.length) return;
+    const kept = new Set(noteImageIds({ blocks: cleanBlocks }));
+    try {
+      // Store the new images that are still in the note, then drop the ones that were removed.
+      for (const id of kept) {
+        if (pendingImages.current[id]) await saveImage(id, pendingImages.current[id]);
+      }
+    } catch {
+      setSaveError(true);
+      return;
+    }
+    deleteImages(originalImageIds.current.filter((id) => !kept.has(id)));
     onSave({
       id: note?.id || 'note-' + uid(),
       textId, textTitle, paragraphIndex,
@@ -245,13 +284,13 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
           {blocks.map((block, idx) =>
             block.type === 'text' ? (
               <TextBlock key={block.id} block={block} onChange={handleTextChange}
-                onDelete={(id) => handleDeleteBlock(id, null)}
+                onDelete={(id) => handleDeleteBlock(id)}
                 onAddTextAfter={() => addTextAfter(idx)}
                 t={t} fileInputRef={fileInputRef} setPendingInsert={setPendingInsert} blockIndex={idx} />
             ) : (
               <ImageBlock key={block.id} block={block} imageUrl={imageUrls[block.imageId]}
                 onCaptionChange={handleCaptionChange}
-                onDelete={(id, imgId) => handleDeleteBlock(id, imgId)}
+                onDelete={(id) => handleDeleteBlock(id)}
                 onAddTextAfter={() => addTextAfter(idx)}
                 t={t} fileInputRef={fileInputRef} setPendingInsert={setPendingInsert} blockIndex={idx} />
             )
@@ -278,6 +317,7 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
             </button>
           )}
           <div style={{ flex: 1 }} />
+          {saveError && <span style={{ alignSelf: 'center', fontSize: 12.5, color: '#c0392b' }}>{t('toast.save_failed')}</span>}
           <Button variant="ghost" onClick={onClose}>{t('noteEditor.cancel')}</Button>
           <Button variant="primary" icon="check" onClick={handleSave}>{t('noteEditor.save')}</Button>
         </div>
