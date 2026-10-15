@@ -3,7 +3,8 @@ import { Icon, Button, Skel } from '../components/ui.jsx';
 import WordPopup from '../components/WordPopup.jsx';
 import NoteEditor from '../components/NoteEditor.jsx';
 import { wordCount, relativeTime, readingTime, saveProgress, getProgress, saveNote, deleteNote } from '../utils/storage.js';
-import { cleanWord, extractSentence } from '../utils/dictionary.js';
+import { cleanWord, extractSentence, tokenize } from '../utils/text.js';
+import { matchesSaved } from '../utils/lemma.js';
 
 // ---- Pagination -------------------------------------------------------------
 const WORDS_PER_PAGE = 900;
@@ -76,7 +77,7 @@ function ReadingBody({ paragraphs, pageStartIndex, savedSet, activeKey, onWord, 
       {paragraphs.map((para, pi) => {
         const globalIdx = pageStartIndex + pi;
         const hasNote = noteIndices.has(globalIdx);
-        const tokens = para.match(/[A-Za-z']+|[^A-Za-z']+/g) || [];
+        const tokens = tokenize(para);
         return (
           <p key={pi} style={{ margin: '0 0 1.25em', textWrap: 'pretty', position: 'relative' }}
             onContextMenu={(e) => { e.preventDefault(); onContextMenu(e.clientX, e.clientY, globalIdx, para); }}>
@@ -87,20 +88,20 @@ function ReadingBody({ paragraphs, pageStartIndex, savedSet, activeKey, onWord, 
               </span>
             )}
             {tokens.map((tok, ti) => {
-              if (/^[A-Za-z']+$/.test(tok)) {
-                const base = cleanWord(tok);
+              if (tok.word) {
+                const base = cleanWord(tok.text);
                 const key = 'w' + (counter++);
                 const hlColor = highlightMap?.[base];
                 const hlClass = hlColor ? ` hl-${hlColor}` : '';
-                const cls = 'rw' + (savedSet.has(base) ? ' saved' : '') + (activeKey === key ? ' active' : '') + hlClass;
+                const cls = 'rw' + (matchesSaved(savedSet, base) ? ' saved' : '') + (activeKey === key ? ' active' : '') + hlClass;
                 return (
                   <span key={key} data-wkey={key} className={cls}
-                    onClick={(e) => onWord(e.currentTarget, tok, key, para)}>
-                    {tok}
+                    onClick={(e) => onWord(e.currentTarget, tok.text, key, para)}>
+                    {tok.text}
                   </span>
                 );
               }
-              return <span key={'s' + pi + '_' + ti}>{tok}</span>;
+              return <span key={'s' + pi + '_' + ti}>{tok.text}</span>;
             })}
           </p>
         );
@@ -321,7 +322,7 @@ export default function ReadText({
       {active && (
         <WordPopup targetEl={active.el} word={active.word} context={active.context}
           savedSet={savedSet}
-          onSave={(word, defData) => onSaveWord(word, text, defData)}
+          onSave={(word, defData) => onSaveWord(word, text, defData, active.context)}
           onClose={() => setActive(null)}
           definitionOptions={definitionOptions} t={t}
           currentHighlight={highlights?.[activeClean] || null}

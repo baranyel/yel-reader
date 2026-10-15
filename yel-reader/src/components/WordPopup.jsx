@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react
 import { Icon, Button } from './ui.jsx';
 import { lookupWord, cleanWord } from '../utils/dictionary.js';
 import { getCefrLevel, CEFR_COLORS } from '../utils/cefrWords.js';
+import { matchesSaved } from '../utils/lemma.js';
 
 const HIGHLIGHT_COLORS = [
   { id: 'yellow', bg: 'rgba(250,204,21,0.7)', label: '●' },
@@ -26,22 +27,33 @@ export default function WordPopup({
 
   const activeWord = chainWord || word;
   const clean = cleanWord(activeWord);
-  const isSaved = savedSet?.has(clean) ?? false;
+  const isSaved = savedSet ? matchesSaved(savedSet, clean) : false;
+  const isSavedExact = savedSet?.has(clean) ?? false;
 
   useEffect(() => { setChainWord(null); }, [word]);
   useEffect(() => { setNoteText(wordNote || ''); }, [wordNote, word]);
 
   useEffect(() => {
     if (!activeWord) return;
+    // Ignore answers that arrive after the user moved on to another word.
+    let cancelled = false;
     setLoading(true);
     setData(null);
     setCefrLevel(null);
     const ctx = chainWord ? '' : context;
-    lookupWord(activeWord, ctx, definitionOptions || {}).then((result) => {
-      setData(result);
-      setLoading(false);
-    });
-    getCefrLevel(clean).then(setCefrLevel).catch(() => {});
+    lookupWord(activeWord, ctx, definitionOptions || {})
+      .then((result) => {
+        if (cancelled) return;
+        setData(result);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setData(null);
+        setLoading(false);
+      });
+    getCefrLevel(clean).then((level) => { if (!cancelled) setCefrLevel(level); }).catch(() => {});
+    return () => { cancelled = true; };
   }, [activeWord, definitionOptions?.definitionIn, definitionOptions?.nativeLanguage]);
 
   const reposition = useCallback(() => {
@@ -141,6 +153,11 @@ export default function WordPopup({
               </button>
             )}
           </div>
+          {data?.lemma && (
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 3 }}>
+              {t ? t('popup.form_of', data.lemma) : `form of “${data.lemma}”`}
+            </div>
+          )}
           {definitionOptions?.showPhonetic !== false && data?.phonetic && (
             <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 3, fontFamily: "'Courier New', monospace" }}>
               {data.phonetic}
@@ -181,7 +198,7 @@ export default function WordPopup({
       ) : data ? (
         <>
           <p style={{ margin: '12px 0 0', fontSize: 14.5, lineHeight: 1.6, color: 'var(--text)' }}>
-            {data.definition}
+            {!data.found && data.offline ? (t ? t('popup.offline') : 'Offline') : data.definition}
           </p>
 
           {definitionOptions?.showExample !== false && data.found && data.example && (
@@ -208,7 +225,11 @@ export default function WordPopup({
             </div>
           )}
         </>
-      ) : null}
+      ) : (
+        <p style={{ margin: '12px 0 0', fontSize: 14, color: 'var(--text-faint)' }}>
+          {t ? t('popup.lookup_failed') : 'Could not look this word up.'}
+        </p>
+      )}
 
       {/* Save button */}
       {!loading && (
@@ -227,7 +248,7 @@ export default function WordPopup({
       )}
 
       {/* ---- Personal note (only for saved, non-chained words) ---- */}
-      {!loading && isSaved && !chainWord && (
+      {!loading && isSavedExact && !chainWord && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
             <Icon name="pen" size={12} />

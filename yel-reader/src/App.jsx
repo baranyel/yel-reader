@@ -318,7 +318,7 @@ export default function App() {
     persistWords(words.map((w) => w.word === word ? { ...w, ...fields } : w));
   }, [words]);
 
-  const saveWord = (word, sourceText, defData) => {
+  const saveWord = (word, sourceText, defData, context) => {
     if (words.some((w) => w.word === word)) {
       toast({ message: t('toast.word_dupe', word), icon: 'bookmark' });
       return;
@@ -328,9 +328,12 @@ export default function App() {
       sourceId: sourceText.id,
       sourceTitle: sourceText.title,
       savedAt: Date.now(),
-      definition: defData?.definition || null,
-      pos: defData?.pos || null,
-      example: defData?.example || null,
+      // Only keep a definition we actually found, never the "not available" placeholder.
+      definition: defData?.found ? defData.definition : null,
+      pos: defData?.found ? defData.pos : null,
+      example: defData?.found ? defData.example : null,
+      context: context || null,
+      lemma: defData?.lemma || null,
       lang: defData?.lang || 'en',
       note: null,
       cefr: null,

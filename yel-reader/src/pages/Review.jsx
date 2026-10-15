@@ -374,10 +374,10 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
               </span>
             )}
 
-            {/* Example sentence with word highlighted */}
-            {current.example && (
+            {/* The sentence the word was found in (falls back to the dictionary example) */}
+            {(current.context || current.example) && (
               <p style={{ margin: '0 0 0', fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 14.5, lineHeight: 1.7, color: 'var(--text-soft)', maxWidth: 380 }}>
-                "<HighlightedSentence sentence={current.example} word={current.word} />"
+                "<HighlightedSentence sentence={current.context || current.example} word={current.word} />"
               </p>
             )}
 
@@ -428,7 +428,7 @@ export default function Review({ words, onBack, onUpdateWord, t }) {
             </p>
 
             {/* Example with highlight */}
-            {current.example && (
+            {current.example && current.example !== current.context && (
               <p style={{ margin: '0 0 16px', fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 14.5, lineHeight: 1.65, color: 'var(--text-soft)', borderLeft: '2px solid var(--border)', paddingLeft: 14 }}>
                 "<HighlightedSentence sentence={current.example} word={current.word} />"
               </p>

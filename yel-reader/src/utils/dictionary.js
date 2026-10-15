@@ -1,3 +1,7 @@
+import { cleanWord, extractSentence } from './text.js';
+import { lemmaCandidates } from './lemma.js';
+import { cacheGet, cacheSet } from './lookupCache.js';
+
 const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 
 // Lingva instances — fallback only
@@ -21,18 +25,7 @@ function translatePOS(pos, lang) {
   return pos;
 }
 
-export function cleanWord(word) {
-  return word.toLowerCase().replace(/[^a-z']/g, '');
-}
-
-export function extractSentence(paragraphText, word) {
-  const lower = word.toLowerCase();
-  const sentences = paragraphText.match(/[^.!?]+[.!?]*/g) || [];
-  for (const s of sentences) {
-    if (s.toLowerCase().includes(lower)) return s.trim();
-  }
-  return paragraphText.trim().slice(0, 300);
-}
+export { cleanWord, extractSentence };
 
 // options: { definitionIn: 'source'|'native', nativeLanguage: 'tr'|... }
 export async function lookupWord(word, context = '', options = {}) {
@@ -46,11 +39,20 @@ export async function lookupWord(word, context = '', options = {}) {
   return await lookupEnglish(clean, context);
 }
 
-// --- English: Free Dictionary API → Anthropic fallback (if key is set) ------
+// --- English: Free Dictionary API (cached) → Anthropic fallback (if key is set) ---
 async function lookupEnglish(clean, context) {
-  // Try the word as-is, then try the bare stem (duck ← ducks, walk ← walked)
-  let entries = await fetchDictEntries(clean);
-  if (!entries) entries = await fetchDictEntries(simpleStem(clean));
+  // Try the word as written first, then plausible base forms (ducks → duck, walked → walk).
+  let entries = null;
+  let unreachable = false;
+  for (const candidate of [clean, ...lemmaCandidates(clean).slice(0, 4)]) {
+    try {
+      entries = await fetchDictEntries(candidate);
+    } catch {
+      unreachable = true;
+      break;
+    }
+    if (entries) break;
+  }
 
   if (entries) {
     const allMeanings = entries.flatMap((e) => e.meanings || []);
@@ -70,8 +72,10 @@ async function lookupEnglish(clean, context) {
       const synonyms = [...new Set([...(meaning?.synonyms || []), ...(def?.synonyms || [])])].slice(0, 6);
       const antonyms = [...new Set([...(meaning?.antonyms || []), ...(def?.antonyms || [])])].slice(0, 6);
 
+      const headword = (entries[0].word || clean).toLowerCase();
       return {
-        word: entries[0].word || clean,
+        word: headword,
+        lemma: headword !== clean ? headword : null,
         pos: meaning.partOfSpeech || '—',
         definition: def.definition,
         example: def.example || null,
@@ -86,9 +90,9 @@ async function lookupEnglish(clean, context) {
     }
   }
 
-  // Anthropic fallback — only if key is set, English only
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (apiKey) {
+  // Anthropic fallback — only if key is set, English only, and only when we are online
+  const apiKey = import.meta.env?.VITE_ANTHROPIC_API_KEY;
+  if (apiKey && !unreachable) {
     const prompt = context
       ? `Given this sentence: "${context}", define the word "${clean}" in one sentence. Then give one example sentence. Nothing else.`
       : `Define the word "${clean}" in one sentence. Then give one example sentence. Nothing else.`;
@@ -98,7 +102,7 @@ async function lookupEnglish(clean, context) {
 
   return {
     word: clean, pos: '—', definition: 'Definition not available.',
-    example: null, found: false, source: 'none', lang: 'en',
+    example: null, found: false, source: 'none', lang: 'en', offline: unreachable,
   };
 }
 
@@ -137,16 +141,29 @@ async function lookupNative(clean, context, nativeLang) {
 
 // --- Dictionary helpers ------------------------------------------------------
 
+// Words the API said it does not know (this session only; the API may learn them later).
+const missing = new Set();
+
+// Resolves to the entries, or null when the word is unknown. Throws if the service
+// cannot be reached, so callers can tell "unknown word" from "offline".
 async function fetchDictEntries(word) {
-  try {
-    const res = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
-    );
-    if (res.ok) {
-      const data = await res.json();
-      return Array.isArray(data) && data.length ? data : null;
-    }
-  } catch {}
+  const key = 'dict:en:' + word;
+  const cached = await cacheGet(key);
+  if (cached) return cached;
+  if (missing.has(word)) return null;
+
+  const res = await fetch(
+    `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+    { signal: AbortSignal.timeout(6000) },
+  );
+  if (res.status === 404) { missing.add(word); return null; }
+  if (!res.ok) throw new Error('dictionary http ' + res.status);
+  const data = await res.json();
+  if (Array.isArray(data) && data.length) {
+    await cacheSet(key, data);
+    return data;
+  }
+  missing.add(word);
   return null;
 }
 
@@ -183,23 +200,15 @@ function selectBestMeaning(meanings, word, context) {
   return match || meanings[0];
 }
 
-// Minimal English stemmer for common inflections.
-function simpleStem(word) {
-  if (word.length < 4) return word;
-  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';   // flies → fly
-  if (word.endsWith('ves')) return word.slice(0, -3) + 'f';   // leaves → leaf
-  if (word.endsWith('ing') && word.length > 6) return word.slice(0, -3); // swimming → swim
-  if (word.endsWith('ing') && word.length > 5) return word.slice(0, -3) + 'e'; // making → make
-  if (word.endsWith('ed') && word.length > 5) return word.slice(0, -2);  // walked → walk
-  if (word.endsWith('es') && word.length > 4) return word.slice(0, -2);  // watches → watch
-  if (word.endsWith('s') && word.length > 4) return word.slice(0, -1);   // ducks → duck
-  return word;
-}
-
 // --- Translation: Google (primary, unlimited) → Lingva fallback -------------
 async function translate(text, from, to) {
-  return (await translateWithGoogle(text, from, to))
-      || (await translateWithLingva(text, from, to));
+  const key = `tr:${from}>${to}:${text}`;
+  const cached = await cacheGet(key);
+  if (cached) return cached;
+  const result = (await translateWithGoogle(text, from, to))
+              || (await translateWithLingva(text, from, to));
+  if (result) await cacheSet(key, result);
+  return result;
 }
 
 // Google Translate unofficial endpoint — no key, no rate limit, CORS enabled

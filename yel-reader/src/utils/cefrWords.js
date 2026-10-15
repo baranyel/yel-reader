@@ -1,3 +1,5 @@
+import { cacheGet, cacheSet } from './lookupCache.js';
+
 // ---- CEFR constants ---------------------------------------------------------
 export const CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
@@ -20,8 +22,8 @@ export const CEFR_LABELS = {
 };
 
 // ---- Bundled BNC-inspired frequency data ------------------------------------
-// Words grouped by CEFR level, space-separated. Covers ~9000 common English words.
-// Source basis: BNC frequency list + Oxford CEFR mapping + NGSL.
+// Words grouped by CEFR level, space-separated (~1,300 common English words).
+// Offline fallback only: the Datamuse frequency estimate below covers far more words.
 const RAW = {
   A1: `a able about above across act add after again age ago all allow also always am an and another answer any are area around as ask at away back bad be been before behind big book both boy bring but by call came can car child children city come could country cut day did do does doing done down each early eat even every example eye face family far feel few find first follow for form found four from full get give go good got great group had has have he help her here high him his home house how i if important in include into is it its itself just keep kind know large last late learn leave left life light like line list little live long look love low made make man many may me mean men might miss more most mother move much my name need never new next no not now of off often on once only open or other our out over own part people place plan play point problem put question read really result right run said same school say seem self she should show side small so some start still stop story student study such take talk tell that the their them then there these they this three through time to together too turn type under up us use very want was water way we well went were what when where which while who why will with work world would write yet you young your`,
 
@@ -87,24 +89,26 @@ async function lookupDatamuse(word) {
 
 /**
  * Get CEFR level for a word.
- * Strategy: Datamuse (online, accurate) → bundled BNC data (offline) → 'C2' default.
+ * Strategy: cache → Datamuse (online, covers all words) → bundled list (offline) → null.
+ * Returns null when the level is unknown (offline, proper nouns, typos) rather than guessing.
  */
 export async function getCefrLevel(word) {
   const clean = word.toLowerCase().replace(/[^a-z]/g, '');
   if (!clean) return null;
 
-  // 1. Try Datamuse (most accurate — covers all English words)
+  const key = 'cefr:' + clean;
+  const cached = await cacheGet(key);
+  if (cached) return cached;
+
   try {
     const level = await lookupDatamuse(clean);
-    if (level) return level;
+    if (level) {
+      await cacheSet(key, level);
+      return level;
+    }
   } catch {}
 
-  // 2. Bundled BNC data (offline fallback)
-  const bundled = lookupBundle(clean);
-  if (bundled) return bundled;
-
-  // 3. Unknown word — assume C2 (rare/specialized)
-  return 'C2';
+  return lookupBundle(clean);
 }
 
 /**

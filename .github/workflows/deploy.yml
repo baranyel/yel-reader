@@ -16,8 +16,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm install
+          node-version: 22
+      - run: npm ci
+        working-directory: yel-reader
+      - run: npm test
         working-directory: yel-reader
       - run: npm run build
         working-directory: yel-reader
