@@ -306,7 +306,7 @@ export default function Settings({ tweaks, setTweak, settings, setSetting, t }) 
       <Section label={t('settings.s_language')} />
       <SettingCard>
         <SettingRow label={t('settings.native_lang')}
-          hint={t('settings.uiLanguage') === 'en' ? 'Used for native-language definitions' : 'Anadil tanımları için kullanılır'}>
+          hint={t('settings.native_lang_hint')}>
           <SegControl
             value={settings.nativeLanguage}
             onChange={(v) => setSetting('nativeLanguage', v)}

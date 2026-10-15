@@ -1,470 +1,220 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Icon, Button } from '../components/ui.jsx';
 import { sm2Update } from '../utils/storage.js';
 import { CEFR_COLORS } from '../utils/cefrWords.js';
+import { lookupWord } from '../utils/dictionary.js';
+import { buildQueue, dueWithin, afterGrade } from '../utils/reviewQueue.js';
 
-// ---- Constants ---------------------------------------------------------------
-const LANG_FLAGS = {
-  en: '🇬🇧', tr: '🇹🇷', fr: '🇫🇷', de: '🇩🇪',
-  es: '🇪🇸', it: '🇮🇹', pt: '🇵🇹', ru: '🇷🇺',
-  ja: '🇯🇵', ko: '🇰🇷', zh: '🇨🇳',
-};
+const GRADES = [
+  { quality: 0, key: '1', labelKey: 'review.again', color: '#ef4444' },
+  { quality: 3, key: '2', labelKey: 'review.hard', color: '#f59e0b' },
+  { quality: 4, key: '3', labelKey: 'review.good', color: '#22c55e' },
+  { quality: 5, key: '4', labelKey: 'review.easy', color: '#3b82f6' },
+];
 
-// ---- Queue builder -----------------------------------------------------------
-function buildQueue(words) {
-  const now = Date.now();
-  const due = words.filter(
-    (w) => w.definition && (!w.sm2_nextReview || w.sm2_nextReview <= now)
-  );
-  return [...due].sort(() => Math.random() - 0.5).slice(0, 20);
-}
-
-// ---- Next review preview (pure, no side-effects) ----------------------------
-function previewNextReview(word, quality) {
-  if (quality === 0) return '~10 min';
-  const { sm2_interval } = sm2Update(word, quality);
-  return sm2_interval === 1 ? '1 day' : `${sm2_interval} days`;
-}
-
-// ---- Highlighted sentence ---------------------------------------------------
+// The sentence with the reviewed word emphasised.
 function HighlightedSentence({ sentence, word }) {
-  if (!sentence || !word) return null;
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const parts = sentence.split(new RegExp(`(${escaped})`, 'gi'));
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === word.toLowerCase() ? (
-          <mark
-            key={i}
-            style={{
-              background: 'var(--accent-soft)',
-              color: 'var(--accent)',
-              borderRadius: 3,
-              padding: '0 2px',
-              fontStyle: 'normal',
-              fontWeight: 600,
-            }}
-          >
-            {part}
-          </mark>
-        ) : (
-          part
-        )
-      )}
-    </>
+  return parts.map((part, i) =>
+    part.toLowerCase() === word.toLowerCase()
+      ? <mark key={i} style={{ background: 'var(--accent-soft)', color: 'var(--accent)', borderRadius: 3, padding: '0 2px', fontStyle: 'normal', fontWeight: 600 }}>{part}</mark>
+      : part
   );
 }
 
-// ---- Grade button -----------------------------------------------------------
-function GradeBtn({ emoji, label, nextLabel, shortcut, color, onClick }) {
-  const [hover, setHover] = useState(false);
-  const [press, setPress] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); setPress(false); }}
-      onMouseDown={() => setPress(true)}
-      onMouseUp={() => setPress(false)}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 4,
-        padding: '12px 6px 10px',
-        borderRadius: 'var(--radius)',
-        border: `1px solid ${color}35`,
-        background: hover ? `${color}20` : `${color}0e`,
-        cursor: 'pointer',
-        transition: 'background .15s, transform .1s',
-        transform: press ? 'translateY(1px)' : 'none',
-        fontFamily: 'var(--font-ui)',
-        minWidth: 0,
-        minHeight: 88,
-      }}
-    >
-      <span style={{ fontSize: 20, lineHeight: 1 }}>{emoji}</span>
-      <span style={{ fontSize: 13, fontWeight: 700, color, textAlign: 'center', lineHeight: 1.2, marginTop: 2 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{nextLabel}</span>
-      <span style={{ fontSize: 10, color: 'var(--text-faint)', opacity: 0.5, marginTop: 1 }}>[{shortcut}]</span>
-    </button>
-  );
+// Fetches a definition for words that were saved without one (offline, or lookup failed)
+// and stores it on the word, so it only has to happen once.
+function useMissingDefinition(word, enabled, definitionOptions, onUpdateWord) {
+  const [state, setState] = useState('idle'); // idle | loading | failed | offline
+  useEffect(() => {
+    setState('idle');
+    if (!enabled || !word) return;
+    let cancelled = false;
+    setState('loading');
+    lookupWord(word.word, word.context || '', definitionOptions || {})
+      .then((r) => {
+        // Keep a found definition even if the reader already moved to the next card.
+        if (r?.found) onUpdateWord(word.word, { definition: r.definition, pos: r.pos, example: r.example, lemma: r.lemma || null });
+        if (!cancelled) setState(r?.found ? 'idle' : r?.offline ? 'offline' : 'failed');
+      })
+      .catch(() => { if (!cancelled) setState('failed'); });
+    return () => { cancelled = true; };
+  }, [word?.word, enabled]); // eslint-disable-line
+  return state;
 }
 
-// ---- Main component ----------------------------------------------------------
-export default function Review({ words, onBack, onUpdateWord, t }) {
+export default function Review({ words, onBack, onUpdateWord, definitionOptions, t }) {
+  // The session's queue is fixed when the page opens; word data is always read live.
   const [queue, setQueue] = useState(() => buildQueue(words));
-  const [phase, setPhase] = useState('start'); // 'start' | 'review' | 'done'
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [results, setResults] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
-  const [sessionStart, setSessionStart] = useState(null);
+  const [counts, setCounts] = useState({ 0: 0, 3: 0, 4: 0, 5: 0 });
+  const relearn = useRef({});
 
-  const flippedRef = useRef(flipped);
-  useEffect(() => { flippedRef.current = flipped; });
-  const gradeRef = useRef(null);
+  const current = idx < queue.length ? words.find((w) => w.word === queue[idx]) : null;
+  const done = queue.length > 0 && idx >= queue.length;
+  const defState = useMissingDefinition(current, flipped && !!current && !current.definition, definitionOptions, onUpdateWord);
 
-  const current = queue[idx];
-  const total = queue.length;
+  const grade = (quality) => {
+    if (!current) return;
+    onUpdateWord(current.word, sm2Update(current, quality));
+    setCounts((c) => ({ ...c, [quality]: c[quality] + 1 }));
+    setQueue((q) => afterGrade(q, current.word, quality, relearn.current));
+    setIdx((i) => i + 1);
+    setFlipped(false);
+  };
 
-  function finishSession() {
-    setPhase('done');
-  }
-
-  function handleGrade(quality) {
-    const updates = sm2Update(current, quality);
-    onUpdateWord(current.word, updates);
-    const newResults = {
-      again: results.again + (quality === 0 ? 1 : 0),
-      hard: results.hard + (quality === 3 ? 1 : 0),
-      good: results.good + (quality === 4 ? 1 : 0),
-      easy: results.easy + (quality === 5 ? 1 : 0),
-    };
-    setResults(newResults);
-    if (idx + 1 >= total) {
-      finishSession();
-    } else {
-      setIdx((i) => i + 1);
-      setFlipped(false);
-    }
-  }
-  gradeRef.current = handleGrade;
-
-  // Keyboard shortcuts — stable listener via refs
+  // A word deleted meanwhile simply drops out of the session.
   useEffect(() => {
-    if (phase !== 'review') return;
+    if (!done && idx < queue.length && !current) setIdx((i) => i + 1);
+  }, [current, done, idx, queue.length]);
+
+  // Space reveals, 1–4 grade.
+  const gradeRef = useRef(grade);
+  gradeRef.current = grade;
+  useEffect(() => {
+    if (done) return;
     const onKey = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.closest?.('input, textarea')) return;
       if (e.key === ' ') { e.preventDefault(); setFlipped(true); return; }
-      if (!flippedRef.current) return;
-      const map = { '1': 0, '2': 3, '3': 4, '4': 5 };
-      if (e.key in map) gradeRef.current(map[e.key]);
+      const g = GRADES.find((x) => x.key === e.key);
+      if (g && flipped) gradeRef.current(g.quality);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase]);
+  }, [done, flipped]);
 
-  function handleReviewAgain() {
-    const newQueue = buildQueue(words);
-    setQueue(newQueue);
-    setIdx(0);
-    setFlipped(false);
-    setResults({ again: 0, hard: 0, good: 0, easy: 0 });
-    setSessionStart(null);
-    setPhase('start');
-  }
+  const nextLabel = (quality) => {
+    if (quality === 0) return t('review.again_hint');
+    return t('review.days', sm2Update(current, quality).sm2_interval);
+  };
 
-  // Upcoming schedule (next 1 day, next 3 days)
-  const upcoming = useMemo(() => {
-    const now = Date.now();
-    const DAY = 86_400_000;
-    return [
-      { days: 1, count: words.filter((w) => w.sm2_nextReview > now && w.sm2_nextReview <= now + DAY).length },
-      { days: 3, count: words.filter((w) => w.sm2_nextReview > now + DAY && w.sm2_nextReview <= now + 3 * DAY).length },
-    ].filter((u) => u.count > 0);
-  }, [words]);
-
-  // ---- No words due --------------------------------------------------------
-  if (phase === 'start' && total === 0) {
+  // ---- Nothing due ----------------------------------------------------------
+  if (queue.length === 0) {
+    const soon = dueWithin(words, 7);
     return (
       <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', padding: '60px 24px', animation: 'fadeUp .4s ease' }}>
-        <div style={{ width: 88, height: 88, borderRadius: 24, background: 'var(--accent-soft)', display: 'grid', placeItems: 'center', margin: '0 auto 24px', color: 'var(--accent)' }}>
-          <Icon name="check" size={42} stroke={1.5} />
+        <div style={{ width: 80, height: 80, borderRadius: 22, background: 'var(--accent-soft)', display: 'grid', placeItems: 'center', margin: '0 auto 22px', color: 'var(--accent)' }}>
+          <Icon name="check" size={38} stroke={1.5} />
         </div>
-        <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>{t('review.none_title')}</h2>
-        <p style={{ margin: '10px 0 28px', fontSize: 15, color: 'var(--text-faint)', lineHeight: 1.65 }}>{t('review.none_body')}</p>
-
-        <Button variant="primary" icon="arrowLeft" onClick={onBack}>{t('review.back')}</Button>
-      </div>
-    );
-  }
-
-  // ---- Start screen --------------------------------------------------------
-  if (phase === 'start') {
-    return (
-      <div style={{ maxWidth: 560, margin: '0 auto', padding: '32px 24px 60px', animation: 'fadeUp .35s ease' }}>
-        <div style={{ marginBottom: 28 }}>
-          <Button variant="ghost" icon="arrowLeft" size="sm" onClick={onBack}>{t('review.back')}</Button>
-        </div>
-
-        {/* Due count */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <h1 style={{ margin: '0 0 10px', fontSize: 26, fontWeight: 700, color: 'var(--text)' }}>
-            {t('review.start_header')}
-          </h1>
-          <p style={{ margin: '0 0 2px', fontSize: 44, fontWeight: 800, color: 'var(--accent)', lineHeight: 1 }}>{total}</p>
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-faint)' }}>{t('review.start_due', total)}</p>
-        </div>
-
-        {/* Upcoming schedule */}
-        {upcoming.length > 0 && (
-          <div style={{ background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 20px', marginBottom: 14, boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 12 }}>
-              {t('review.upcoming_title')}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {upcoming.map((u) => (
-                <div
-                  key={u.days}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '5px 12px', borderRadius: 99,
-                    background: 'var(--bg-sunk)', border: '1px solid var(--border)',
-                    fontSize: 13,
-                  }}
-                >
-                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{u.count}</span>
-                  <span style={{ color: 'var(--text-soft)' }}>
-                    {u.days === 1 ? t('review.upcoming_tomorrow') : t('review.upcoming_in_days', u.days)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* CTA */}
-        <div style={{ textAlign: 'center', paddingTop: 10 }}>
-          <Button
-            variant="primary"
-            size="lg"
-            icon="zap"
-            onClick={() => { setSessionStart(Date.now()); setPhase('review'); }}
-          >
-            {t('review.start_btn')}
-          </Button>
+        <h2 style={{ margin: 0, fontSize: 23, fontWeight: 700, color: 'var(--text)' }}>{t('review.none_title')}</h2>
+        <p style={{ margin: '10px 0 6px', fontSize: 15, color: 'var(--text-faint)', lineHeight: 1.6 }}>{t('review.none_body')}</p>
+        {soon > 0 && <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-soft)' }}>{t('review.upcoming_week', soon)}</p>}
+        <div style={{ marginTop: 26 }}>
+          <Button variant="primary" icon="arrowLeft" onClick={onBack}>{t('review.back')}</Button>
         </div>
       </div>
     );
   }
 
-  // ---- Session done --------------------------------------------------------
-  if (phase === 'done') {
-    const reviewed = results.again + results.hard + results.good + results.easy;
-    const correct = results.good + results.easy;
-    const accuracy = reviewed > 0 ? Math.round((correct / reviewed) * 100) : 0;
-    const elapsed = sessionStart ? Math.max(1, Math.round((Date.now() - sessionStart) / 60000)) : 1;
-
+  // ---- Session finished -----------------------------------------------------
+  if (done) {
+    const reviewed = counts[0] + counts[3] + counts[4] + counts[5];
+    const moreDue = buildQueue(words).length;
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center', padding: '60px 24px', animation: 'fadeUp .4s ease' }}>
-        <div style={{ width: 88, height: 88, borderRadius: 24, background: 'var(--accent-soft)', display: 'grid', placeItems: 'center', margin: '0 auto 22px', color: 'var(--accent)', animation: 'popIn .5s cubic-bezier(.2,.9,.3,1) both' }}>
-          <Icon name="check" size={42} stroke={1.5} />
+        <div style={{ width: 80, height: 80, borderRadius: 22, background: 'var(--accent-soft)', display: 'grid', placeItems: 'center', margin: '0 auto 22px', color: 'var(--accent)' }}>
+          <Icon name="check" size={38} stroke={1.5} />
         </div>
-        <h2 style={{ margin: '0 0 8px', fontSize: 26, fontWeight: 700, color: 'var(--text)' }}>{t('review.done_title')}</h2>
-        <p style={{ margin: '0 0 28px', fontSize: 15, color: 'var(--text-soft)' }}>{t('review.done_body', reviewed)}</p>
-
-        {/* Stats row */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18, flexWrap: 'wrap' }}>
-          {[
-            { label: t('review.accuracy'), value: `${accuracy}%`, color: 'var(--accent)' },
-            { label: t('review.time_spent'), value: `${elapsed}m`, color: '#3b82f6' },
-          ].map((s) => (
-            <div key={s.label} style={{ padding: '14px 24px', background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 90 }}>
-              <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Breakdown */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 28, flexWrap: 'wrap' }}>
-          {[
-            { label: t('review.easy'), count: results.easy, color: '#3b82f6' },
-            { label: t('review.good'), count: results.good, color: '#22c55e' },
-            { label: t('review.hard'), count: results.hard, color: '#f59e0b' },
-            { label: t('review.again'), count: results.again, color: '#ef4444' },
-          ]
-            .filter((r) => r.count > 0)
-            .map((r) => (
-              <div key={r.label} style={{ textAlign: 'center', padding: '10px 16px', background: 'var(--bg-elev)', border: `1px solid ${r.color}30`, borderRadius: 'var(--radius)', minWidth: 64 }}>
-                <div style={{ fontSize: 22, fontWeight: 700, color: r.color }}>{r.count}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>{r.label}</div>
-              </div>
-            ))}
-        </div>
-
+        <h2 style={{ margin: '0 0 8px', fontSize: 23, fontWeight: 700, color: 'var(--text)' }}>{t('review.done_title')}</h2>
+        <p style={{ margin: '0 0 14px', fontSize: 15, color: 'var(--text-soft)' }}>{t('review.done_body', reviewed)}</p>
+        <p style={{ margin: '0 0 28px', fontSize: 13, color: 'var(--text-faint)' }}>
+          {GRADES.filter((g) => counts[g.quality] > 0).map((g) => `${t(g.labelKey)} ${counts[g.quality]}`).join(' · ')}
+        </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Button variant="ghost" icon="arrowLeft" onClick={onBack}>{t('review.back')}</Button>
-          <Button variant="primary" icon="repeat" onClick={handleReviewAgain}>{t('review.review_again')}</Button>
+          <Button variant="secondary" icon="arrowLeft" onClick={onBack}>{t('review.back')}</Button>
+          {moreDue > 0 && (
+            <Button variant="primary" icon="repeat" onClick={() => {
+              setQueue(buildQueue(words)); setIdx(0); setFlipped(false);
+              setCounts({ 0: 0, 3: 0, 4: 0, 5: 0 }); relearn.current = {};
+            }}>
+              {t('review.continue', moreDue)}
+            </Button>
+          )}
         </div>
       </div>
     );
   }
 
-  // ---- Active review card --------------------------------------------------
-  const remaining = total - idx;
-  const estMin = Math.max(1, Math.round(remaining * 15 / 60));
-  const progress = (idx / total) * 100;
-  const flag = LANG_FLAGS[current?.lang] || '📖';
+  if (!current) return null;
 
-  const GRADE_BTNS = [
-    { emoji: '❌', quality: 0, color: '#ef4444', shortcut: '1', labelKey: 'review.again' },
-    { emoji: '😐', quality: 3, color: '#f59e0b', shortcut: '2', labelKey: 'review.hard' },
-    { emoji: '✅', quality: 4, color: '#22c55e', shortcut: '3', labelKey: 'review.good' },
-    { emoji: '🚀', quality: 5, color: '#3b82f6', shortcut: '4', labelKey: 'review.easy' },
-  ];
-
+  // ---- Card -----------------------------------------------------------------
+  const sentence = current.context || current.example;
   return (
     <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 0 48px', animation: 'fadeUp .25s ease' }}>
-      {/* Progress bar */}
       <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginBottom: 22 }}>
-        <div style={{ height: '100%', width: `${progress}%`, background: 'var(--accent)', borderRadius: 99, transition: 'width .4s ease' }} />
+        <div style={{ height: '100%', width: `${(idx / queue.length) * 100}%`, background: 'var(--accent)', borderRadius: 99, transition: 'width .3s ease' }} />
       </div>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
         <Button variant="ghost" icon="arrowLeft" size="sm" onClick={onBack}>{t('review.back')}</Button>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>~{estMin} min</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-soft)', background: 'var(--bg-sunk)', padding: '3px 11px', borderRadius: 99, border: '1px solid var(--border)' }}>
-            {t('review.progress', idx + 1, total)}
-          </span>
-        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-soft)', background: 'var(--bg-sunk)', padding: '3px 11px', borderRadius: 99, border: '1px solid var(--border)' }}>
+          {t('review.progress', Math.min(idx + 1, queue.length), queue.length)}
+        </span>
       </div>
 
-      {/* 3D flip card */}
-      <div
-        style={{ perspective: '1200px', marginBottom: 18, cursor: flipped ? 'default' : 'pointer' }}
-        onClick={!flipped ? () => setFlipped(true) : undefined}
-      >
-        <div
-          style={{
-            position: 'relative',
-            minHeight: 360,
-            transformStyle: 'preserve-3d',
-            transition: 'transform .55s cubic-bezier(.4,0,.2,1)',
-            transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-          }}
-        >
-          {/* FRONT */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              backfaceVisibility: 'hidden',
-              WebkitBackfaceVisibility: 'hidden',
-              background: 'var(--bg-elev)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)',
-              boxShadow: 'var(--shadow-md)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '40px 32px 28px',
-              textAlign: 'center',
-              minHeight: 360,
-            }}
-          >
-            {/* Language flag */}
-            <span style={{ fontSize: 22, marginBottom: 14, lineHeight: 1 }}>{flag}</span>
+      <div onClick={() => setFlipped(true)} style={{
+        background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-md)', padding: '36px 32px', textAlign: 'center', marginBottom: 18,
+        cursor: flipped ? 'default' : 'pointer', minHeight: 220,
+      }}>
+        <h1 style={{ margin: '0 0 12px', fontFamily: 'var(--reading-font)', fontSize: 44, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--text)', lineHeight: 1.1 }}>
+          {current.word}
+        </h1>
+        {sentence && (
+          <p style={{ margin: '0 auto', maxWidth: 440, fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 15, lineHeight: 1.7, color: 'var(--text-soft)' }}>
+            “<HighlightedSentence sentence={sentence} word={current.word} />”
+          </p>
+        )}
 
-            {/* Word */}
-            <h1 style={{ margin: '0 0 10px', fontFamily: 'var(--reading-font)', fontSize: 48, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--text)', lineHeight: 1.1 }}>
-              {current.word}
-            </h1>
-
-            {/* POS */}
-            {current.pos && current.pos !== '—' && (
-              <span style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 600, fontStyle: 'italic', color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '2px 10px', borderRadius: 99, marginBottom: 18 }}>
-                {current.pos}
-              </span>
-            )}
-
-            {/* The sentence the word was found in (falls back to the dictionary example) */}
-            {(current.context || current.example) && (
-              <p style={{ margin: '0 0 0', fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 14.5, lineHeight: 1.7, color: 'var(--text-soft)', maxWidth: 380 }}>
-                "<HighlightedSentence sentence={current.context || current.example} word={current.word} />"
-              </p>
-            )}
-
-            {/* Flip hint */}
-            <div style={{ position: 'absolute', bottom: 18, fontSize: 12, color: 'var(--text-faint)', opacity: 0.75, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontSize: 14 }}>↻</span>
-              <span>{t('review.flip_hint')}</span>
+        {flipped && (
+          <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid var(--border)', textAlign: 'left', animation: 'fadeUp .18s ease' }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              {current.cefr && (
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#fff', background: CEFR_COLORS[current.cefr] || 'var(--accent)', padding: '2px 9px', borderRadius: 99 }}>{current.cefr}</span>
+              )}
+              {current.pos && current.pos !== '—' && (
+                <span style={{ fontSize: 11.5, fontWeight: 600, fontStyle: 'italic', color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '1px 9px', borderRadius: 99 }}>{current.pos}</span>
+              )}
             </div>
-          </div>
-
-          {/* BACK */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              backfaceVisibility: 'hidden',
-              WebkitBackfaceVisibility: 'hidden',
-              transform: 'rotateY(180deg)',
-              background: 'var(--bg-elev)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)',
-              boxShadow: 'var(--shadow-md)',
-              padding: '28px 30px',
-              overflowY: 'auto',
-              minHeight: 360,
-            }}
-          >
-            {/* CEFR badge */}
-            {current.cefr && (
-              <div style={{ marginBottom: 14 }}>
-                <span style={{
-                  display: 'inline-block',
-                  padding: '3px 10px',
-                  borderRadius: 99,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: '#fff',
-                  background: CEFR_COLORS[current.cefr] || 'var(--accent)',
-                }}>
-                  {current.cefr}
-                </span>
-              </div>
-            )}
-
-            {/* Definition */}
-            <p style={{ margin: '0 0 16px', fontSize: 17, lineHeight: 1.65, color: 'var(--text)' }}>
-              {current.definition}
+            <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: current.definition ? 'var(--text)' : 'var(--text-faint)' }}>
+              {current.definition
+                || (defState === 'loading' ? t('review.def_loading')
+                  : defState === 'offline' ? t('popup.offline')
+                  : t('review.def_missing'))}
             </p>
-
-            {/* Example with highlight */}
             {current.example && current.example !== current.context && (
-              <p style={{ margin: '0 0 16px', fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 14.5, lineHeight: 1.65, color: 'var(--text-soft)', borderLeft: '2px solid var(--border)', paddingLeft: 14 }}>
-                "<HighlightedSentence sentence={current.example} word={current.word} />"
+              <p style={{ margin: '12px 0 0', fontFamily: 'var(--reading-font)', fontStyle: 'italic', fontSize: 14.5, lineHeight: 1.6, color: 'var(--text-soft)' }}>
+                “{current.example}”
               </p>
             )}
-
-            {/* Note */}
             {current.note && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', background: 'var(--bg-sunk)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14, padding: '10px 14px', background: 'var(--bg-sunk)', borderRadius: 'var(--radius-sm)' }}>
                 <Icon name="pen" size={14} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
                 <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-soft)', lineHeight: 1.55 }}>{current.note}</p>
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Reveal button / Rating buttons */}
       {!flipped ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          <Button variant="primary" size="lg" onClick={() => setFlipped(true)}>
-            {t('review.reveal')}
-          </Button>
+          <Button variant="primary" size="lg" onClick={() => setFlipped(true)}>{t('review.reveal')}</Button>
           <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('review.flip_hint')}</span>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, animation: 'fadeUp .18s ease' }}>
-          {GRADE_BTNS.map((btn) => (
-            <GradeBtn
-              key={btn.quality}
-              emoji={btn.emoji}
-              label={t(btn.labelKey)}
-              nextLabel={previewNextReview(current, btn.quality)}
-              shortcut={btn.shortcut}
-              color={btn.color}
-              onClick={() => handleGrade(btn.quality)}
-            />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {GRADES.map((g) => (
+            <button key={g.quality} onClick={() => grade(g.quality)} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '11px 4px',
+              borderRadius: 'var(--radius)', border: `1px solid ${g.color}40`, background: `${g.color}12`,
+            }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: g.color }}>{t(g.labelKey)}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{nextLabel(g.quality)}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-faint)', opacity: .6 }}>[{g.key}]</span>
+            </button>
           ))}
         </div>
       )}

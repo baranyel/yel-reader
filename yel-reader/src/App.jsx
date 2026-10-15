@@ -6,7 +6,6 @@ import Home from './pages/Home.jsx';
 import NewText from './pages/NewText.jsx';
 import ReadText from './pages/ReadText.jsx';
 import MyWords from './pages/MyWords.jsx';
-import Quiz from './pages/Quiz.jsx';
 import Review from './pages/Review.jsx';
 import Settings from './pages/Settings.jsx';
 import Notes from './pages/Notes.jsx';
@@ -18,6 +17,7 @@ import { loadTexts, putText, removeText } from './utils/textStore.js';
 import { reanchorNotes } from './utils/notesAnchor.js';
 import { deleteImages, noteImageIds } from './utils/imageStore.js';
 import { getCefrLevel } from './utils/cefrWords.js';
+import { isDue } from './utils/reviewQueue.js';
 import { getT } from './utils/i18n.js';
 
 const FONT_MAP = {
@@ -99,8 +99,7 @@ function Sidebar({ nav, view, collapsed, onNav, onToggle, dark, onToggleTheme, t
           <NavItem key={item.id} item={item}
             active={
               view === item.id ||
-              (item.id === 'library' && (view === 'read' || view === 'edit')) ||
-              (item.id === 'words' && view === 'quiz')
+              (item.id === 'library' && (view === 'read' || view === 'edit'))
             }
             collapsed={collapsed} onClick={() => onNav(item.id)} />
         ))}
@@ -138,8 +137,7 @@ function TabBar({ nav, view, onNav }) {
     }}>
       {nav.map((item) => {
         const active = view === item.id
-          || (item.id === 'library' && (view === 'read' || view === 'edit'))
-          || (item.id === 'words' && view === 'quiz');
+          || (item.id === 'library' && (view === 'read' || view === 'edit'));
         return (
           <button key={item.id} onClick={() => onNav(item.id)} style={{
             flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
@@ -188,10 +186,8 @@ export default function App() {
     setSettingsState((prev) => { const next = { ...prev, [key]: value }; save(SETTINGS_KEY, next); return next; });
   }, []);
 
-  // Review badge: words with definitions that are due
-  const dueCount = words.filter(
-    (w) => w.definition && (!w.sm2_nextReview || w.sm2_nextReview <= Date.now())
-  ).length;
+  // Review badge
+  const dueCount = words.filter((w) => isDue(w)).length;
 
   const noteCount = Object.keys(notes).length;
 
@@ -268,7 +264,7 @@ export default function App() {
   const persistWords = (next) => { setWords(next); save(WORDS_KEY, next); };
 
   const goTo = (v) => {
-    if (['library', 'words', 'new', 'settings', 'quiz', 'review', 'notes'].includes(v)) {
+    if (['library', 'words', 'new', 'settings', 'review', 'notes'].includes(v)) {
       if (v === 'new') setEditingId(null);
       setView(v);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -364,9 +360,15 @@ export default function App() {
   };
 
   // Update any field(s) on a word by its key
+  // Functional update: async callers (a definition arriving late) must not overwrite
+  // changes made in the meantime with an old copy of the list.
   const updateWordFields = useCallback((word, fields) => {
-    persistWords(words.map((w) => w.word === word ? { ...w, ...fields } : w));
-  }, [words]);
+    setWords((prev) => {
+      const next = prev.map((w) => (w.word === word ? { ...w, ...fields } : w));
+      save(WORDS_KEY, next);
+      return next;
+    });
+  }, []);
 
   const saveWord = (word, sourceText, defData, context) => {
     if (words.some((w) => w.word === word)) {
@@ -466,11 +468,9 @@ export default function App() {
   } else if (view === 'new' || view === 'edit') {
     page = <NewText onSave={editingId ? updateText : addText} onCancel={() => goTo('library')} editingText={editingText} t={t} />;
   } else if (view === 'words') {
-    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} sourceExists={(id) => texts.some((x) => x.id === id)} onStartQuiz={() => goTo('quiz')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
-  } else if (view === 'quiz') {
-    page = <Quiz words={words} onBack={() => goTo('words')} t={t} />;
+    page = <MyWords words={words} onDelete={deleteWord} onOpenSource={openText} onBrowse={() => goTo('library')} sourceExists={(id) => texts.some((x) => x.id === id)} dueCount={dueCount} onStartReview={() => goTo('review')} onUpdateNote={(word, note) => updateWordFields(word, { note })} t={t} />;
   } else if (view === 'review') {
-    page = <Review words={words} onBack={() => goTo('words')} onUpdateWord={(word, fields) => updateWordFields(word, fields)} t={t} />;
+    page = <Review words={words} onBack={() => goTo('words')} onUpdateWord={updateWordFields} definitionOptions={definitionOptions} t={t} />;
   } else if (view === 'settings') {
     page = <Settings tweaks={tweaks} setTweak={setTweak} settings={settings} setSetting={setSetting} t={t} />;
   } else if (view === 'notes') {

@@ -113,7 +113,7 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote, sourceExi
   );
 }
 
-export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartQuiz, onUpdateNote, sourceExists, t }) {
+export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onStartReview, dueCount = 0, onUpdateNote, sourceExists, t }) {
   const [query, setQuery] = useState('');
   const [focus, setFocus] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -127,9 +127,6 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
     return c;
   }, [enriched]);
 
-  const wordsWithDefs = words.filter((w) => w.definition);
-  const quizReady = wordsWithDefs.length >= 4;
-  const quizNeeded = Math.max(0, 4 - wordsWithDefs.length);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -175,21 +172,14 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
                   </>
                 )}
               </div>
-              <Button variant="primary" icon="zap" onClick={quizReady ? onStartQuiz : undefined}
-                disabled={!quizReady} title={!quizReady ? t('myWords.need_defs', quizNeeded) : undefined}>
-                {t('myWords.quiz_start')}
+              <Button variant="primary" icon="repeat" onClick={dueCount ? onStartReview : undefined} disabled={!dueCount}>
+                {t('myWords.review_btn', dueCount)}
               </Button>
             </div>
           )
         }
       />
 
-      {!quizReady && words.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg-sunk)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 18, fontSize: 13.5, color: 'var(--text-faint)' }}>
-          <Icon name="zap" size={16} style={{ color: 'var(--accent)' }} />
-          {t('myWords.need_defs', quizNeeded)} · {t('quiz.need_more_hint')}
-        </div>
-      )}
 
       {words.length > 0 && (
         <>
