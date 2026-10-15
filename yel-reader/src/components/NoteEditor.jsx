@@ -14,10 +14,10 @@ export const NOTE_COLORS = [
 ];
 
 export const NOTE_IMPORTANCE = [
-  { id: null,  label: '—',  title: 'Normal' },
-  { id: 1,     label: '!',  title: 'Önemli' },
-  { id: 2,     label: '!!', title: 'Çok önemli' },
-  { id: 3,     label: '!!!',title: 'Kritik' },
+  { id: null,  label: '—',  titleKey: 'common.importance_normal' },
+  { id: 1,     label: '!',  titleKey: 'common.importance_1' },
+  { id: 2,     label: '!!', titleKey: 'common.importance_2' },
+  { id: 3,     label: '!!!',titleKey: 'common.importance_3' },
 ];
 
 export function getNoteColor(colorId) {
@@ -68,7 +68,7 @@ function TextBlock({ block, onChange, onDelete, onAddTextAfter, t, fileInputRef,
         style={{ width: '100%', resize: 'none', overflow: 'hidden', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-sunk)', padding: '10px 40px 10px 12px', fontSize: 14.5, lineHeight: 1.65, color: 'var(--text)', fontFamily: 'var(--reading-font)', outline: 'none', transition: 'border-color .15s' }}
         onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
         onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
-      <button onClick={() => onDelete(block.id)} title="Delete"
+      <button onClick={() => onDelete(block.id)} title={t('common.delete')}
         style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', color: 'var(--text-faint)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in srgb,#c0392b 12%,transparent)'; e.currentTarget.style.color = '#c0392b'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-faint)'; }}>
@@ -254,12 +254,12 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
         <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
           {/* Color */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={() => setColor(null)} title="Renk yok"
+            <button onClick={() => setColor(null)} title={t('common.no_color')}
               style={{ width: 20, height: 20, borderRadius: 99, border: color === null ? '2px solid var(--accent)' : '2px solid var(--border)', background: 'var(--bg-sunk)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Icon name="x" size={10} style={{ color: 'var(--text-faint)' }} />
             </button>
             {NOTE_COLORS.map((c) => (
-              <button key={c.id} onClick={() => setColor(c.id)} title={c.id}
+              <button key={c.id} onClick={() => setColor(c.id)} title={t(`common.color_${c.id}`)}
                 style={{ width: 20, height: 20, borderRadius: 99, border: color === c.id ? `2.5px solid ${c.dot}` : '2px solid transparent', background: c.dot, cursor: 'pointer', boxShadow: color === c.id ? `0 0 0 2px var(--bg-elev), 0 0 0 4px ${c.dot}` : 'none', transition: 'box-shadow .12s' }} />
             ))}
           </div>
@@ -267,7 +267,7 @@ export default function NoteEditor({ note, paragraphPreview, textId, textTitle, 
           {/* Importance */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {NOTE_IMPORTANCE.map((imp) => (
-              <button key={String(imp.id)} onClick={() => setImportance(imp.id)} title={imp.title}
+              <button key={String(imp.id)} onClick={() => setImportance(imp.id)} title={t(imp.titleKey)}
                 style={{ minWidth: 30, padding: '3px 8px', fontSize: 12, fontWeight: 700, borderRadius: 6, border: '1.5px solid', cursor: 'pointer', transition: 'all .12s',
                   borderColor: importance === imp.id ? 'var(--accent)' : 'var(--border)',
                   background: importance === imp.id ? 'var(--accent-soft)' : 'transparent',

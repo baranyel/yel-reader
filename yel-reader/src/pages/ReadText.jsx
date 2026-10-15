@@ -4,7 +4,7 @@ import WordPopup from '../components/WordPopup.jsx';
 import NoteEditor from '../components/NoteEditor.jsx';
 import PhrasePopup from '../components/PhrasePopup.jsx';
 import { ReadProgressRing } from '../components/ReadProgress.jsx';
-import { wordCount, relativeTime, readingTime, saveProgress, getProgress } from '../utils/storage.js';
+import { wordCount, relativeTime, readingMinutes, saveProgress, getProgress } from '../utils/storage.js';
 import { cleanWord, extractSentence, tokenize } from '../utils/text.js';
 import { matchesSaved } from '../utils/lemma.js';
 import { resolveResume } from '../utils/resume.js';
@@ -320,10 +320,10 @@ export default function ReadText({
             {text.title}
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, fontSize: 13, color: 'var(--text-faint)', fontWeight: 500, flexWrap: 'wrap' }}>
-            <span>{readingTime(totalWc)}</span>
+            <span>{t('common.min_read', readingMinutes(totalWc))}</span>
             <span style={{ width: 3, height: 3, borderRadius: 99, background: 'var(--text-faint)' }} />
-            <span>Saved {relativeTime(text.savedAt)}</span>
-            {isPaginated && (<><span style={{ width: 3, height: 3, borderRadius: 99, background: 'var(--text-faint)' }} /><span>{totalPages} pages</span></>)}
+            <span>{t('common.saved_ago', relativeTime(text.savedAt, t.lang))}</span>
+            {isPaginated && (<><span style={{ width: 3, height: 3, borderRadius: 99, background: 'var(--text-faint)' }} /><span>{t('common.pages_n', totalPages)}</span></>)}
           </div>
           {showTapHint && (
             <div style={{ marginTop: 18, display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 99 }}>

@@ -9,6 +9,34 @@ const S = {
       settings: 'Settings',
     },
     common: {
+      close: 'Close',
+      edit: 'Edit',
+      clear: 'Clear',
+      delete: 'Delete',
+      sure: 'Sure?',
+      toggle_theme: 'Toggle theme',
+      min_read: (n) => `${n} min read`,
+      words_n: (n) => `${n.toLocaleString()} ${n === 1 ? 'word' : 'words'}`,
+      pages_n: (n) => `${n} pages`,
+      saved_ago: (s) => `Saved ${s}`,
+      due: 'due',
+      days_short: (n) => `${n}d`,
+      add_note: 'Add note',
+      edit_note: 'Edit note',
+      delete_text: 'Delete text',
+      confirm_delete_text: 'Confirm: delete text',
+      delete_word: 'Delete word',
+      confirm_delete_word: 'Confirm: delete word',
+      blocks_n: (n) => `${n} ${n === 1 ? 'block' : 'blocks'}`,
+      no_color: 'No colour',
+      importance_normal: 'Normal',
+      importance_1: 'Important',
+      importance_2: 'Very important',
+      importance_3: 'Critical',
+      color_yellow: 'Yellow', color_green: 'Green', color_blue: 'Blue', color_pink: 'Pink',
+      color_red: 'Red', color_orange: 'Orange', color_purple: 'Purple',
+      text_not_found: 'Text not found',
+      text_not_found_body: 'This text may have been deleted.',
       light_mode: 'Light mode',
       dark_mode: 'Dark mode',
       collapse: 'Collapse',
@@ -247,6 +275,34 @@ const S = {
       settings: 'Ayarlar',
     },
     common: {
+      close: 'Kapat',
+      edit: 'Düzenle',
+      clear: 'Temizle',
+      delete: 'Sil',
+      sure: 'Emin misin?',
+      toggle_theme: 'Temayı değiştir',
+      min_read: (n) => `${n} dk okuma`,
+      words_n: (n) => `${n.toLocaleString('tr')} kelime`,
+      pages_n: (n) => `${n} sayfa`,
+      saved_ago: (s) => `${s} kaydedildi`,
+      due: 'sırada',
+      days_short: (n) => `${n} g`,
+      add_note: 'Not ekle',
+      edit_note: 'Notu düzenle',
+      delete_text: 'Metni sil',
+      confirm_delete_text: 'Onayla: metni sil',
+      delete_word: 'Kelimeyi sil',
+      confirm_delete_word: 'Onayla: kelimeyi sil',
+      blocks_n: (n) => `${n} blok`,
+      no_color: 'Renk yok',
+      importance_normal: 'Normal',
+      importance_1: 'Önemli',
+      importance_2: 'Çok önemli',
+      importance_3: 'Kritik',
+      color_yellow: 'Sarı', color_green: 'Yeşil', color_blue: 'Mavi', color_pink: 'Pembe',
+      color_red: 'Kırmızı', color_orange: 'Turuncu', color_purple: 'Mor',
+      text_not_found: 'Metin bulunamadı',
+      text_not_found_body: 'Bu metin silinmiş olabilir.',
       light_mode: 'Aydınlık mod',
       dark_mode: 'Karanlık mod',
       collapse: 'Daralt',
@@ -478,7 +534,7 @@ const S = {
 
 export function getT(lang) {
   const base = S[lang] || S.en;
-  return (path, ...args) => {
+  const t = (path, ...args) => {
     const val = path.split('.').reduce((o, k) => o?.[k], base);
     if (typeof val === 'function') return val(...args);
     if (typeof val === 'string') return val;
@@ -486,6 +542,8 @@ export function getT(lang) {
     if (typeof fb === 'function') return fb(...args);
     return typeof fb === 'string' ? fb : path;
   };
+  t.lang = S[lang] ? lang : 'en'; // for Intl formatting (dates, relative times)
+  return t;
 }
 
 // Available options for selectors

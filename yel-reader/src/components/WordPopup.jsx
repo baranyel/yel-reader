@@ -189,7 +189,7 @@ export default function WordPopup({
               {data.pos}
             </span>
           )}
-          <button onClick={onClose} title="Close"
+          <button onClick={onClose} title={t ? t('common.close') : 'Close'}
             style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', color: 'var(--text-faint)' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; e.currentTarget.style.color = 'var(--text)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-faint)'; }}>
@@ -335,7 +335,7 @@ export default function WordPopup({
               const active = currentHighlight === c.id;
               return (
                 <button key={c.id} onClick={() => onHighlight(active ? null : c.id)}
-                  title={c.id}
+                  title={t ? t(`common.color_${c.id}`) : c.id}
                   style={{
                     width: 22, height: 22, borderRadius: 99, border: 'none',
                     background: c.bg, cursor: 'pointer', flexShrink: 0,

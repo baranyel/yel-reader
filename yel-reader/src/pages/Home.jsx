@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Icon, Button, DeleteButton, PageHeader, EmptyState, IconButton } from '../components/ui.jsx';
-import { preview, wordCount, relativeTime, readingTime } from '../utils/storage.js';
+import { preview, wordCount, relativeTime, readingMinutes } from '../utils/storage.js';
 
-function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
+function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount, t }) {
   const [hover, setHover] = useState(false);
   const wc = wordCount(text.body);
   return (
@@ -26,7 +26,7 @@ function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
           <Icon name="doc" size={17} />
         </span>
         <div style={{ flex: 1, minWidth: 0, opacity: hover ? 0 : 1, transition: 'opacity .15s' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-faint)', fontWeight: 500 }}>{relativeTime(text.savedAt)}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-faint)', fontWeight: 500 }}>{relativeTime(text.savedAt, t.lang)}</span>
         </div>
         {text.language && (
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '2px 7px', borderRadius: 99, letterSpacing: '.03em', textTransform: 'uppercase', opacity: hover ? 0 : 1, transition: 'opacity .15s' }}>
@@ -34,8 +34,8 @@ function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
           </span>
         )}
         <div style={{ position: 'absolute', top: 17, right: 14, opacity: hover ? 1 : 0, transition: 'opacity .15s', display: 'flex', gap: 2 }}>
-          <IconButton name="edit" size={16} title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(); }} />
-          <DeleteButton onConfirm={onDelete} label="text" />
+          <IconButton name="edit" size={16} title={t('common.edit')} onClick={(e) => { e.stopPropagation(); onEdit(); }} />
+          <DeleteButton onConfirm={onDelete} title={t('common.delete_text')} confirmTitle={t('common.confirm_delete_text')} sureLabel={t('common.sure')} />
         </div>
       </div>
       <h3 style={{ margin: '0 0 8px', fontSize: 17.5, fontWeight: 650, letterSpacing: '-.01em', color: 'var(--text)', lineHeight: 1.3 }}>
@@ -45,8 +45,8 @@ function TextCard({ text, onOpen, onDelete, onEdit, index, noteCount }) {
         {preview(text.body, 120)}
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-faint)', fontWeight: 500 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="book" size={14} /> {wc.toLocaleString()} words</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="clock" size={14} /> {readingTime(wc)}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="book" size={14} /> {t('common.words_n', wc)}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="clock" size={14} /> {t('common.min_read', readingMinutes(wc))}</span>
         {noteCount > 0 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto', color: 'var(--accent)', fontWeight: 600 }}>
             <Icon name="note" size={13} /> {noteCount}
@@ -119,7 +119,7 @@ export default function Home({ texts, onOpen, onDelete, onEdit, onNew, t, notes 
               placeholder={t('library.search_ph')}
               style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'var(--text)', fontFamily: 'var(--font-ui)' }}
             />
-            {query && <IconButton name="x" size={14} title="Clear" onClick={() => setQuery('')} />}
+            {query && <IconButton name="x" size={14} title={t('common.clear')} onClick={() => setQuery('')} />}
           </div>
 
           {/* Sort segmented control */}
@@ -160,7 +160,7 @@ export default function Home({ texts, onOpen, onDelete, onEdit, onNew, t, notes 
         <div style={grid}>
           {processed.map((text, i) => (
             <TextCard key={text.id} text={text} index={i} onOpen={() => onOpen(text.id)} onDelete={() => onDelete(text.id)} onEdit={() => onEdit(text.id)}
-              noteCount={Object.values(notes || {}).filter((n) => n.textId === text.id).length} />
+              noteCount={Object.values(notes || {}).filter((n) => n.textId === text.id).length} t={t} />
           ))}
         </div>
       )}

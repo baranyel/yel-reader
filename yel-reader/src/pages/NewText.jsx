@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Button, Icon, IconButton, PageHeader } from '../components/ui.jsx';
-import { wordCount, readingTime } from '../utils/storage.js';
+import { wordCount, readingMinutes } from '../utils/storage.js';
 import { TEXT_LANGUAGES } from '../utils/i18n.js';
 
 // CORS proxies tried in order; first success wins.
@@ -453,7 +453,7 @@ export default function NewText({ onSave, onCancel, t, editingText }) {
             <div style={{ display: 'flex', gap: 18, fontSize: 13, color: 'var(--text-faint)', fontWeight: 500 }}>
               <span><strong style={{ color: 'var(--text-soft)', fontWeight: 650 }}>{wc.toLocaleString()}</strong> {t('newText.words')}</span>
               <span><strong style={{ color: 'var(--text-soft)', fontWeight: 650 }}>{chars.toLocaleString()}</strong> {t('newText.chars')}</span>
-              {wc > 0 && <span>{readingTime(wc)}</span>}
+              {wc > 0 && <span>{t('common.min_read', readingMinutes(wc))}</span>}
             </div>
             <Button variant="primary" size="lg" icon={isEditing ? 'check' : 'book'} disabled={!canSave} onClick={save}>
               {saveLabel}

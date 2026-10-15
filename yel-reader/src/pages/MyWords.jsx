@@ -57,12 +57,12 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote, sourceExi
             )}
             {daysUntil !== null && !isDue && (
               <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', padding: '1px 7px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon name="clock" size={11} /> {daysUntil}d
+                <Icon name="clock" size={11} /> {t('common.days_short', daysUntil)}
               </span>
             )}
             {isDue && (
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-soft)', padding: '1px 7px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon name="repeat" size={11} /> due
+                <Icon name="repeat" size={11} /> {t('common.due')}
               </span>
             )}
           </div>
@@ -87,12 +87,12 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote, sourceExi
             <div style={{ marginTop: 9, display: 'flex', alignItems: 'flex-start', gap: 7 }}>
               <Icon name="pen" size={13} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text-soft)', lineHeight: 1.5, flex: 1 }}>{entry.note}</p>
-              <IconButton name="edit" size={13} title="Edit note" onClick={() => { setNoteText(entry.note); setEditingNote(true); }} style={{ flexShrink: 0 }} />
+              <IconButton name="edit" size={13} title={t('common.edit_note')} onClick={() => { setNoteText(entry.note); setEditingNote(true); }} style={{ flexShrink: 0 }} />
             </div>
           ) : hover && (
             <button onClick={() => { setNoteText(''); setEditingNote(true); }}
               style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--text-faint)', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 99, padding: '3px 10px', cursor: 'pointer' }}>
-              <Icon name="pen" size={12} /> Not ekle
+              <Icon name="pen" size={12} /> {t('common.add_note')}
             </button>
           )}
         </div>
@@ -105,8 +105,8 @@ function WordRow({ entry, index, onDelete, onOpenSource, onUpdateNote, sourceExi
             <Icon name="doc" size={12} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.sourceTitle}</span>
           </button>
-          <span style={{ fontSize: 12, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{relativeTime(entry.savedAt)}</span>
-          <DeleteButton onConfirm={() => onDelete(entry.word)} label="word" />
+          <span style={{ fontSize: 12, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{relativeTime(entry.savedAt, t.lang)}</span>
+          <DeleteButton onConfirm={() => onDelete(entry.word)} title={t('common.delete_word')} confirmTitle={t('common.confirm_delete_word')} sureLabel={t('common.sure')} />
         </div>
       </div>
     </div>
@@ -198,7 +198,7 @@ export default function MyWords({ words, onDelete, onOpenSource, onBrowse, onSta
             {cefrFilter && (
               <button onClick={() => { setCefrFilter(null); }}
                 style={{ fontSize: 12, color: 'var(--text-faint)', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 99, padding: '4px 10px', cursor: 'pointer' }}>
-                <Icon name="x" size={11} /> Temizle
+                <Icon name="x" size={11} /> {t('common.clear')}
               </button>
             )}
           </div>

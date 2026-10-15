@@ -496,7 +496,7 @@ export default function App() {
           onNoteSaved={handleNoteSaved}
           onNoteDeleted={handleNoteDeleted}
         />
-      : <EmptyState icon="doc" title="Text not found" body="This text may have been deleted."
+      : <EmptyState icon="doc" title={t('common.text_not_found')} body={t('common.text_not_found_body')}
           action={<Button variant="primary" icon="library" onClick={() => goTo('library')}>{t('nav.library')}</Button>} />;
   }
 
@@ -517,7 +517,7 @@ export default function App() {
                 Yel<span style={{ color: 'var(--accent)' }}>Reader</span>
               </span>
             </div>
-            <IconButton name={tweaks.dark ? 'sun' : 'moon'} onClick={() => setTweak('dark', !tweaks.dark)} title="Toggle theme" />
+            <IconButton name={tweaks.dark ? 'sun' : 'moon'} onClick={() => setTweak('dark', !tweaks.dark)} title={t('common.toggle_theme')} />
           </div>
         )}
 

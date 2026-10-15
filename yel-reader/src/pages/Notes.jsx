@@ -5,7 +5,7 @@ import { getImage } from '../utils/imageStore.js';
 import NoteEditor, { NOTE_COLORS, NOTE_IMPORTANCE } from '../components/NoteEditor.jsx';
 
 // ---- Importance badge -------------------------------------------------------
-function ImportanceBadge({ level }) {
+function ImportanceBadge({ level, t }) {
   if (!level) return null;
   const imp = NOTE_IMPORTANCE.find((i) => i.id === level);
   if (!imp) return null;
@@ -92,8 +92,8 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, textExists, t }) {
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {note.textTitle}
           </span>
-          <ImportanceBadge level={note.importance} />
-          <span style={{ flexShrink: 0 }}>{relativeTime(note.updatedAt)}</span>
+          <ImportanceBadge level={note.importance} t={t} />
+          <span style={{ flexShrink: 0 }}>{relativeTime(note.updatedAt, t.lang)}</span>
           <Icon name={expanded ? 'chevronLeft' : 'chevronRight'} size={14} style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform .18s' }} />
         </div>
 
@@ -131,7 +131,7 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, textExists, t }) {
               </span>
             )}
             <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-faint)', background: 'var(--bg-sunk)', border: '1px solid var(--border)', borderRadius: 99, padding: '1px 8px' }}>
-              {note.blocks.length} blok
+              {t('common.blocks_n', note.blocks.length)}
             </span>
           </div>
         )}
@@ -155,7 +155,7 @@ function NoteCard({ note, onOpenText, onDelete, onEdit, textExists, t }) {
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, color: 'var(--text-faint)', background: 'transparent', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}
           onMouseEnter={(e) => { e.currentTarget.style.color = '#c0392b'; e.currentTarget.style.background = 'color-mix(in srgb,#c0392b 10%,transparent)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent'; }}>
-          <Icon name="trash" size={13} /> Sil
+          <Icon name="trash" size={13} /> {t('common.delete')}
         </button>
         <div style={{ flex: 1 }} />
         <button onClick={() => textExists && onOpenText(note.textId)} disabled={!textExists}

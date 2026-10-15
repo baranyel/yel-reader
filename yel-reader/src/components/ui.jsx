@@ -118,17 +118,17 @@ export function Skel({ w = '100%', h = 14, r = 7, style }) {
 }
 
 // ---- Two-step delete button -------------------------------------------------
-export function DeleteButton({ onConfirm, label = 'item' }) {
+export function DeleteButton({ onConfirm, title, confirmTitle, sureLabel = 'Sure?' }) {
   const [armed, setArmed] = useState(false);
   if (armed) {
     return (
-      <button onClick={(e) => { e.stopPropagation(); onConfirm(); setArmed(false); }} title={'Confirm delete ' + label}
+      <button onClick={(e) => { e.stopPropagation(); onConfirm(); setArmed(false); }} title={confirmTitle}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', fontSize: 12.5, fontWeight: 600, borderRadius: 8, border: '1px solid color-mix(in srgb,#c0392b 35%,transparent)', background: 'color-mix(in srgb,#c0392b 12%,transparent)', color: '#c0392b' }}>
-        <Icon name="trash" size={14} /> Sure?
+        <Icon name="trash" size={14} /> {sureLabel}
       </button>
     );
   }
-  return <IconButton name="trash" danger title={'Delete ' + label} onClick={(e) => { e.stopPropagation(); setArmed(true); }} />;
+  return <IconButton name="trash" danger title={title} onClick={(e) => { e.stopPropagation(); setArmed(true); }} />;
 }
 
 // ---- Page header ------------------------------------------------------------

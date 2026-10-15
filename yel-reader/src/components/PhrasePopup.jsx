@@ -109,7 +109,7 @@ export default function PhrasePopup({ containerRef, from = 'en', to = 'tr', t })
               {state.status === 'error' && t('phrase.failed')}
             </p>
             <button onClick={() => { setOpen(false); setSel(null); window.getSelection()?.removeAllRanges(); }}
-              title="Close"
+              title={t('common.close')}
               style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', color: 'var(--text-faint)', flexShrink: 0 }}>
               <Icon name="x" size={15} />
             </button>

@@ -68,21 +68,24 @@ export function preview(body, n) {
   return flat.length > n ? flat.slice(0, n).trimEnd() + '…' : flat;
 }
 
-export function relativeTime(ts) {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return m + ' min ago';
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
-  const d = Math.floor(h / 24);
-  if (d < 7) return d + (d === 1 ? ' day ago' : ' days ago');
-  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+// "2 days ago" / "2 gün önce" in the interface language.
+export function relativeTime(ts, lang = 'en') {
+  const s = Math.round((ts - Date.now()) / 1000);
+  const abs = Math.abs(s);
+  if (abs >= 7 * 86400) return new Date(ts).toLocaleDateString(lang, { month: 'short', day: 'numeric', year: 'numeric' });
+  // "now" and "yesterday" read better than "0 seconds ago" / "1 day ago"; otherwise use numbers.
+  const words = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' });
+  const numbers = new Intl.RelativeTimeFormat(lang, { numeric: 'always' });
+  if (abs < 60) return words.format(0, 'second');
+  if (abs < 3600) return numbers.format(Math.round(s / 60), 'minute');
+  if (abs < 86400) return numbers.format(Math.round(s / 3600), 'hour');
+  const days = Math.round(s / 86400);
+  return days === -1 ? words.format(-1, 'day') : numbers.format(days, 'day');
 }
 
-export function readingTime(words) {
-  const min = Math.max(1, Math.round(words / 220));
-  return min + ' min read';
+// Estimated reading time in minutes (≈220 words per minute).
+export function readingMinutes(words) {
+  return Math.max(1, Math.round(words / 220));
 }
 
 export const SEED_TEXTS = [
